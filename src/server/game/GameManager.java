@@ -2,6 +2,7 @@ package server.game;
 
 import common.Protocol;
 import server.ClientHandler;
+import server.room.RoomManager;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,6 +16,9 @@ public class GameManager {
 
     // 部屋IDごとに「現在のお題」を保存する
     private static final Map<String, String> currentThemes = new HashMap<>();
+
+    // 部屋IDごとに「現在の描く人」を保存する
+    private static final Map<String, String> drawersByRoom = new HashMap<>();
 
     // 部屋IDごとに「すでに正解したユーザー」を保存する
     private static final Map<String, Set<String>> correctUsersByRoom = new HashMap<>();
@@ -36,7 +40,7 @@ public class GameManager {
             "パソコン"
     );
 
-    // ランダムにお題を選ぶための部品
+    // ランダムにお題・描く人を選ぶための部品
     private static final Random random = new Random();
 
     public static void handleGameStart(ClientHandler client, String data) {
@@ -49,21 +53,53 @@ public class GameManager {
             return;
         }
 
+        List<ClientHandler> members = RoomManager.getRoomMembers(roomId);
+
+        if (members.size() < 2) {
+            client.sendMessage(Protocol.ROOM_ERROR + ":ゲーム開始には2人以上必要です");
+            return;
+        }
+
         // お題リストからランダムに1つ選ぶ
         String theme = themes.get(random.nextInt(themes.size()));
 
-        // この部屋の現在のお題として保存する
+        // 部屋メンバーからランダムに描く人を1人選ぶ
+        ClientHandler drawer = members.get(random.nextInt(members.size()));
+        String drawerName = drawer.getUserName();
+
+        // この部屋の現在のお題・描く人を保存する
         currentThemes.put(roomId, theme);
+        drawersByRoom.put(roomId, drawerName);
 
         // この部屋の正解済みユーザーを初期化する
         correctUsersByRoom.put(roomId, new HashSet<>());
 
-        // この部屋のスコア表を用意する
-        scoresByRoom.putIfAbsent(roomId, new HashMap<>());
+        // この部屋のスコア表を用意し、参加者を初期化する
+        Map<String, Integer> roomScores = scoresByRoom.get(roomId);
+        if (roomScores == null) {
+            roomScores = new HashMap<>();
+            scoresByRoom.put(roomId, roomScores);
+        }
 
-        // 仮実装では、ゲーム開始した本人を「描く人」として扱う
-        // 本来はRoomManagerからメンバー一覧を取得して、描く人をランダムに選ぶ
-        client.sendMessage(Protocol.GAME_ROUND_START + ":DRAWER," + theme);
+        for (ClientHandler member : members) {
+            roomScores.putIfAbsent(member.getUserName(), 0);
+        }
+
+        // 描く人にはお題を送る
+        drawer.sendMessage(Protocol.GAME_ROUND_START + ":DRAWER," + theme);
+
+        // 当てる人にはお題を送らず、描く人の名前だけ送る
+        for (ClientHandler member : members) {
+            if (member != drawer) {
+                member.sendMessage(Protocol.GAME_ROUND_START + ":GUESSER," + drawerName);
+            }
+        }
+
+        // 全員にスコア初期状態を送る
+        RoomManager.broadcastToRoom(
+                roomId,
+                Protocol.GAME_SCORE_UPDATE + ":" + buildScoreText(roomScores)
+        );
     }
 
     public static void handleChatSubmit(ClientHandler client, String data) {
@@ -97,8 +133,13 @@ public class GameManager {
             return;
         }
 
-        // 回答者名を取得する
         String userName = client.getUserName();
+        String drawerName = drawersByRoom.get(roomId);
+
+        // 描く人の発言は回答として判定しない
+        if (userName.equals(drawerName)) {
+            return;
+        }
 
         // この部屋の正解済みユーザー一覧を取得する
         Set<String> correctUsers = correctUsersByRoom.get(roomId);
@@ -110,7 +151,10 @@ public class GameManager {
 
         // すでに正解した人には二重加点しない
         if (correctUsers.contains(userName)) {
-            client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":" + userName + ",ALREADY_CORRECT," + answer);
+            RoomManager.broadcastToRoom(
+                    roomId,
+                    Protocol.GAME_JUDGE_RESULT + ":" + userName + ",ALREADY_CORRECT," + answer
+            );
             return;
         }
 
@@ -133,16 +177,59 @@ public class GameManager {
             int currentScore = roomScores.getOrDefault(userName, 0);
             roomScores.put(userName, currentScore + 100);
 
-            // 正解通知
-            client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":" + userName + ",CORRECT," + answer);
+            // 正解通知を同じ部屋の全員に送る
+            RoomManager.broadcastToRoom(
+                    roomId,
+                    Protocol.GAME_JUDGE_RESULT + ":" + userName + ",CORRECT," + answer
+            );
 
-            // スコア更新通知
-            client.sendMessage(Protocol.GAME_SCORE_UPDATE + ":" + buildScoreText(roomScores));
+            // スコア更新を同じ部屋の全員に送る
+            RoomManager.broadcastToRoom(
+                    roomId,
+                    Protocol.GAME_SCORE_UPDATE + ":" + buildScoreText(roomScores)
+            );
+
+            // 描く人以外が全員正解したらラウンド終了
+            if (isAllGuessersCorrect(roomId)) {
+                RoomManager.broadcastToRoom(
+                        roomId,
+                        Protocol.GAME_ROUND_END + ":" + currentTheme
+                );
+
+                currentThemes.remove(roomId);
+                drawersByRoom.remove(roomId);
+                correctUsersByRoom.remove(roomId);
+            }
 
         } else {
-            // 不正解通知
-            client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":" + userName + ",WRONG," + answer);
+            // 不正解通知を同じ部屋の全員に送る
+            RoomManager.broadcastToRoom(
+                    roomId,
+                    Protocol.GAME_JUDGE_RESULT + ":" + userName + ",WRONG," + answer
+            );
         }
+    }
+
+    private static boolean isAllGuessersCorrect(String roomId) {
+        List<ClientHandler> members = RoomManager.getRoomMembers(roomId);
+        String drawerName = drawersByRoom.get(roomId);
+        Set<String> correctUsers = correctUsersByRoom.get(roomId);
+
+        if (drawerName == null || correctUsers == null) {
+            return false;
+        }
+
+        int guesserCount = 0;
+
+        for (ClientHandler member : members) {
+            String memberName = member.getUserName();
+
+            if (!memberName.equals(drawerName)) {
+                guesserCount++;
+            }
+        }
+
+        return guesserCount > 0 && correctUsers.size() >= guesserCount;
     }
 
     private static String normalize(String text) {

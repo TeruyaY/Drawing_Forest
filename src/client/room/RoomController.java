@@ -14,6 +14,14 @@ public class RoomController {
     private static RoomPanel panel;
     private static String currentRoom;
     private static String userName = "Player";
+    // 本来はサーバーのGAME_ROUND_START受信(担当C)をきっかけに画面遷移すべきだが、
+    // 担当Cの実装が済むまでの暫定として、ゲーム開始要求時にここへ登録されたコールバックを呼ぶ。
+    private static Runnable onGameStartRequested;
+
+    /** 統合エントリポイント側から、ゲーム開始要求時の暫定処理（画面遷移など）を登録する。 */
+    public static void setOnGameStartRequested(Runnable callback) {
+        onGameStartRequested = callback;
+    }
 
     public static void init(GameClient gameClient, RoomPanel roomPanel) {
         client = gameClient;
@@ -66,6 +74,9 @@ public class RoomController {
             return;
         }
         client.sendMessage(Protocol.GAME_START + ":" + currentRoom);
+        if (onGameStartRequested != null) {
+            onGameStartRequested.run();
+        }
     }
 
     public static String getCurrentRoom() {

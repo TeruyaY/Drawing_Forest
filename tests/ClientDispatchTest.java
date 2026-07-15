@@ -81,7 +81,10 @@ public final class ClientDispatchTest {
             server.send("GAME_END:アリス=500;ボブ=0");
 
             waitFor(() -> "日本語部屋".equals(RoomController.getCurrentRoom()), 2_000);
-            waitFor(() -> "アリス=500;ボブ=0".equals(finalScores.get()), 2_000);
+            Thread.sleep(200);
+            SwingUtilities.invokeAndWait(() -> { });
+            assertTrue(finalScores.get() == null, "正解演出中は結果画面へ遷移しない");
+            waitFor(() -> "アリス=500;ボブ=0".equals(finalScores.get()), 2_500);
             SwingUtilities.invokeAndWait(() -> { });
 
             assertEquals("日本語部屋", DrawController.getRoomId(), "描画ルームID");

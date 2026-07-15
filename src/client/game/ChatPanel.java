@@ -2,6 +2,8 @@ package client.game;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.event.ActionEvent;
 
 import javax.swing.BorderFactory;
@@ -15,6 +17,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 
 import client.UiTheme;
+import client.FeedbackEffect;
 
 /** 回答とゲーム内メッセージを一か所で扱うチャットUI。 */
 public class ChatPanel extends JPanel {
@@ -26,6 +29,7 @@ public class ChatPanel extends JPanel {
     private final JLabel themeLabel = new JLabel("お題はラウンド開始時に表示されます");
     private final JLabel timerLabel = new JLabel("残り時間  --");
     private final JLabel resultLabel = new JLabel(" ");
+    private final FeedbackEffect feedbackEffect = new FeedbackEffect(this);
 
     public ChatPanel() {
         setLayout(new BorderLayout(0, 10));
@@ -66,6 +70,7 @@ public class ChatPanel extends JPanel {
         inputField.setEnabled(!drawer);
         sendButton.setEnabled(!drawer);
         inputField.setToolTipText(drawer ? "描く人は回答できません" : "答えを入力してEnterで送信");
+        feedbackEffect.play(FeedbackEffect.Type.INFO);
         revalidate();
         repaint();
     }
@@ -73,6 +78,14 @@ public class ChatPanel extends JPanel {
     public void setTimeRemaining(int seconds) {
         timerLabel.setText("残り時間  " + seconds + "秒");
         timerLabel.setForeground(seconds <= 10 ? UiTheme.DANGER : UiTheme.TEXT);
+        timerLabel.setOpaque(seconds <= 10);
+        timerLabel.setBackground(seconds <= 10 ? new java.awt.Color(249, 231, 231) : UiTheme.SURFACE);
+        timerLabel.setBorder(seconds <= 10
+                ? BorderFactory.createEmptyBorder(3, 6, 3, 6)
+                : BorderFactory.createEmptyBorder(3, 0, 3, 0));
+        if (seconds == 10) {
+            feedbackEffect.play(FeedbackEffect.Type.ERROR);
+        }
         repaint();
     }
 
@@ -80,6 +93,11 @@ public class ChatPanel extends JPanel {
         String localized = localizeResult(message);
         resultLabel.setText(localized.isEmpty() ? " " : localized);
         resultLabel.setForeground(resultColor(message));
+        if (message != null && message.startsWith("Correct")) {
+            feedbackEffect.play(FeedbackEffect.Type.SUCCESS);
+        } else if (message != null && (message.startsWith("Wrong") || message.startsWith("Error"))) {
+            feedbackEffect.play(FeedbackEffect.Type.ERROR);
+        }
     }
 
     private JPanel buildHeader() {
@@ -146,6 +164,12 @@ public class ChatPanel extends JPanel {
         }
         inputField.setText("");
         GameController.submitChat(text);
+    }
+
+    @Override
+    protected void paintChildren(Graphics graphics) {
+        super.paintChildren(graphics);
+        feedbackEffect.paint((Graphics2D) graphics, getWidth(), getHeight());
     }
 
     private static class ChatCellRenderer extends DefaultListCellRenderer {

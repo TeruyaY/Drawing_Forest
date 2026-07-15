@@ -5,6 +5,8 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,12 +21,14 @@ import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
 
 import client.UiTheme;
+import client.FeedbackEffect;
 
 /** 最終順位を読みやすく表示し、次のゲームへ戻る結果画面。 */
 public class ResultPanel extends JPanel {
     private final DefaultListModel<String> rankingModel = new DefaultListModel<>();
     private final JList<String> rankingList = new JList<>(rankingModel);
     private final JButton closeButton = UiTheme.primaryButton("ロビーへ戻る");
+    private final FeedbackEffect feedbackEffect = new FeedbackEffect(this);
 
     public ResultPanel() {
         setLayout(new BorderLayout(0, 24));
@@ -56,6 +60,7 @@ public class ResultPanel extends JPanel {
         if (rankingModel.isEmpty()) {
             rankingModel.addElement("スコアを取得できませんでした");
         }
+        feedbackEffect.play(FeedbackEffect.Type.CELEBRATION);
     }
 
     public void setOnClose(Runnable listener) {
@@ -107,6 +112,12 @@ public class ResultPanel extends JPanel {
         } catch (NumberFormatException exception) {
             return 0;
         }
+    }
+
+    @Override
+    protected void paintChildren(Graphics graphics) {
+        super.paintChildren(graphics);
+        feedbackEffect.paint((Graphics2D) graphics, getWidth(), getHeight());
     }
 
     private static class RankRenderer extends DefaultListCellRenderer {

@@ -1,6 +1,8 @@
 package client.game;
 
 import java.awt.BorderLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridLayout;
 
 import javax.swing.BorderFactory;
@@ -9,6 +11,7 @@ import javax.swing.JPanel;
 import javax.swing.JTextArea;
 
 import client.UiTheme;
+import client.FeedbackEffect;
 
 /** ラウンド状況、回答チャット、スコアを縦方向に整理したゲームUI。 */
 public class GamePanel extends JPanel {
@@ -19,6 +22,7 @@ public class GamePanel extends JPanel {
     private final JLabel timerLabel = new JLabel("残り  --");
     private final JTextArea scoreArea = new JTextArea(4, 20);
     private final ChatPanel chatPanel;
+    private final FeedbackEffect feedbackEffect = new FeedbackEffect(this);
 
     public GamePanel(ChatPanel chatPanel) {
         this.chatPanel = chatPanel;
@@ -53,6 +57,7 @@ public class GamePanel extends JPanel {
 
     public void setScores(String scoreText) {
         scoreArea.setText(formatScores(scoreText));
+        feedbackEffect.play(FeedbackEffect.Type.SCORE);
     }
 
     private JPanel buildStatusPanel() {
@@ -100,5 +105,11 @@ public class GamePanel extends JPanel {
             formatted.append(entry.replace("=", "  ")).append("点");
         }
         return formatted.toString();
+    }
+
+    @Override
+    protected void paintChildren(Graphics graphics) {
+        super.paintChildren(graphics);
+        feedbackEffect.paint((Graphics2D) graphics, getWidth(), getHeight());
     }
 }

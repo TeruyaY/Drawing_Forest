@@ -5,7 +5,6 @@ import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
-import client.FeedbackEffect;
 import client.GameClient;
 import client.draw.DrawController;
 import client.room.RoomController;
@@ -20,7 +19,7 @@ public class GameController {
     private static Timer pendingRoundTransition;
     private static Timer pendingGameEndTransition;
     private static long lastCorrectAtMillis;
-    private static final int CORRECT_EFFECT_HOLD_MILLIS = 1_150;
+    private static final int ROUND_END_HOLD_MILLIS = 1_150;
     private static final int FINAL_RESULT_DELAY_MILLIS = 1_500;
 
     public static void init(GameClient gameClient, ChatPanel panel) {
@@ -161,11 +160,8 @@ public class GameController {
         String theme = parts.length > 1 ? parts[1] : "";
         addChat("Round ended (" + reason + "). Answer: " + theme);
         if (gamePanel != null) {
-            long elapsed = System.currentTimeMillis() - lastCorrectAtMillis;
-            int delay = elapsed >= 0 && elapsed < CORRECT_EFFECT_HOLD_MILLIS
-                    ? (int) (CORRECT_EFFECT_HOLD_MILLIS - elapsed) : 0;
             cancelPendingRoundTransition();
-            pendingRoundTransition = new Timer(delay, event -> {
+            pendingRoundTransition = new Timer(ROUND_END_HOLD_MILLIS, event -> {
                 pendingRoundTransition = null;
                 gamePanel.showRoundTransition(theme);
             });
@@ -187,21 +183,17 @@ public class GameController {
     private static void handleGameEnd(String data) {
         cancelPendingRoundTransition();
         addChat("Game finished. Final scores: " + data);
-        if (gamePanel != null) {
-            gamePanel.setScores(data);
-        }
-
         long elapsed = System.currentTimeMillis() - lastCorrectAtMillis;
-        int delay = !FeedbackEffect.prefersReducedMotion()
-                && elapsed >= 0 && elapsed < FINAL_RESULT_DELAY_MILLIS
-                ? (int) (FINAL_RESULT_DELAY_MILLIS - elapsed) : 0;
-        cancelPendingGameEndTransition();
-        if (delay == 0) {
-            showFinalResult(data);
-            return;
+        boolean showingCorrectEffect = elapsed >= 0 && elapsed < FINAL_RESULT_DELAY_MILLIS;
+        if (gamePanel != null) {
+            gamePanel.setScoresWithoutEffect(data);
+            if (!showingCorrectEffect) {
+                gamePanel.showGameFinishing();
+            }
         }
 
-        pendingGameEndTransition = new Timer(delay, event -> {
+        cancelPendingGameEndTransition();
+        pendingGameEndTransition = new Timer(FINAL_RESULT_DELAY_MILLIS, event -> {
             pendingGameEndTransition = null;
             showFinalResult(data);
         });

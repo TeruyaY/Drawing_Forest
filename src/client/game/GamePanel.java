@@ -70,8 +70,30 @@ public class GamePanel extends JPanel {
     }
 
     public void setScores(String scoreText) {
+        setScores(scoreText, true);
+    }
+
+    public void setScoresWithoutEffect(String scoreText) {
+        setScores(scoreText, false);
+    }
+
+    private void setScores(String scoreText, boolean animate) {
         scoreArea.setText(formatScores(scoreText));
-        feedbackEffect.play(FeedbackEffect.Type.SCORE);
+        if (animate) {
+            feedbackEffect.play(FeedbackEffect.Type.SCORE);
+        }
+    }
+
+    public void showGameFinishing() {
+        roleLabel.setText("ゲーム終了");
+        roleLabel.setForeground(UiTheme.TEXT);
+        themeLabel.setText("最終スコアを確定しました");
+        timerLabel.setText("結果を集計中");
+        timerLabel.setForeground(UiTheme.TEXT_MUTED);
+        chatPanel.setGameFinishing();
+        feedbackEffect.play(FeedbackEffect.Type.ROUND_TRANSITION,
+                "ゲーム終了", "最終結果を集計しています");
+        repaint();
     }
 
     private JPanel buildStatusPanel() {

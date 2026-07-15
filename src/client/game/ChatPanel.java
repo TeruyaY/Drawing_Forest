@@ -111,6 +111,16 @@ public class ChatPanel extends JPanel {
         repaint();
     }
 
+    public void setGameFinishing() {
+        roleLabel.setText("ゲーム終了");
+        roleLabel.setForeground(UiTheme.TEXT);
+        themeLabel.setText("最終結果を集計しています");
+        inputField.setEnabled(false);
+        sendButton.setEnabled(false);
+        inputField.setToolTipText("最終結果を集計しています");
+        repaint();
+    }
+
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout(10, 4));
         header.setOpaque(false);

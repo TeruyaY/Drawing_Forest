@@ -61,6 +61,15 @@ public final class ClientDispatchTest {
             assertEquals("残り時間  60秒", label(chatPanel, "timerLabel").getText(), "開始直後のチャットTime");
             assertTrue(drawPanel.isDrawingEnabled(), "Drawerの描画権限");
 
+            server.send("G_R_END:time_up,dog");
+            Thread.sleep(200);
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals("描く人", label(gamePanel, "roleLabel").getText(),
+                    "全員共通の待機時間中はラウンド表示を維持");
+            waitFor(() -> "ラウンド終了".equals(label(gamePanel, "roleLabel").getText()), 2_000);
+            assertEquals("次のラウンドを準備中", label(gamePanel, "timerLabel").getText(),
+                    "全員共通のラウンド遷移表示");
+
             // 次ラウンドでGuesserへ切り替わった直後の表示も確認する。
             server.send("G_R_START:日本語部屋,2,2,ボブ,GUESSER,,60");
             waitFor(() -> "回答者".equals(label(gamePanel, "roleLabel").getText()), 2_000);

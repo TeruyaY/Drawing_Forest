@@ -2,27 +2,41 @@ package client;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import common.Protocol;
 import client.room.RoomController;
 import client.draw.DrawController;
 import client.game.GameController;
 
 public class GameClient {
+    private static final int CONNECT_TIMEOUT_MILLIS = 5_000;
+
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
 
     // サーバーに接続する
     public void connect(String serverAddress, int port) throws IOException {
-        socket = new Socket(serverAddress, port);
+        Socket newSocket = new Socket();
+        try {
+            newSocket.connect(new InetSocketAddress(serverAddress, port), CONNECT_TIMEOUT_MILLIS);
+        } catch (IOException e) {
+            try {
+                newSocket.close();
+            } catch (IOException ignored) {
+                // 接続失敗時の後始末なので、元の例外を優先する
+            }
+            throw e;
+        }
+        socket = newSocket;
         out = new PrintWriter(
             new BufferedWriter(
-                new OutputStreamWriter(socket.getOutputStream())
+                new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)
             ),
             true
         );
         in = new BufferedReader(
-            new InputStreamReader(socket.getInputStream())
+            new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8)
         );
 
         // サーバーからのメッセージを常時待ち受ける
@@ -31,14 +45,28 @@ public class GameClient {
 
     // A・B・CのControllerから呼び出し、サーバーへメッセージを送る
     public void sendMessage(String message) {
-        if (out != null) {
+        if (out != null && socket != null && !socket.isClosed()) {
             out.println(message);
+        }
+    }
+
+    public void close() {
+        Socket current = socket;
+        socket = null;
+        out = null;
+        in = null;
+        if (current != null) {
+            try {
+                current.close();
+            } catch (IOException ignored) {
+                // 終了処理なので再送や復旧は不要
+            }
         }
     }
 
     // サーバーからのメッセージをバックグラウンドで受信する
     private void startListening() {
-        new Thread(() -> {
+        Thread listener = new Thread(() -> {
             try {
                 String message;
 
@@ -85,8 +113,12 @@ public class GameClient {
                     }
                 }
             } catch (IOException e) {
-                System.out.println("サーバーから切断されました");
+                if (socket != null && !socket.isClosed()) {
+                    System.out.println("サーバーから切断されました: " + e.getMessage());
+                }
             }
-        }).start();
+        }, "drawing-forest-client-listener");
+        listener.setDaemon(true);
+        listener.start();
     }
 }

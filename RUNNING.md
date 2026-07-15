@@ -95,6 +95,40 @@ java -cp out client.room.RoomLauncher 192.168.x.x 8080
 - IPアドレスを打ち間違えていないか（サーバー役PCのネットワーク設定が変わるとIPアドレスも変わることがあるため、繋がらなくなったら再確認する）。
 - 各PCで事前にこのプロジェクトを`javac`でビルド済みか（`out/`フォルダはコピーではなく、各PCでソースからビルドすることを推奨。JDKのバージョンが揃っていれば問題は起きにくい）。
 
+### 5.4 WSL2でサーバーを動かす場合
+
+WSL2の`hostname -I`で表示されるアドレスは仮想マシン内部のIPです。別PCから接続する場合は、管理者権限のWindows PowerShellで8080番をWSLへ転送し、クライアントには`ipconfig`で確認したWindowsのWi-Fi/LAN側IPv4アドレスを指定します。
+
+```powershell
+# WSL側IPを確認（例: 172.31.32.229）
+wsl hostname -I
+
+# 値は上の結果に置き換える
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8080 connectaddress=172.31.32.229 connectport=8080
+
+# 同一LAN内からの接続だけを許可
+New-NetFirewallRule -DisplayName "Drawing Forest TCP 8080" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8080 -Profile Any -RemoteAddress LocalSubnet
+
+# クライアントに指定するWindows側IPを確認
+ipconfig
+```
+
+WSLを再起動するとWSL側IPが変わる場合があります。その場合は古い転送を削除して、新しいIPで追加し直します。
+
+```powershell
+netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=8080
+```
+
+## 6. 自動統合テスト
+
+外部ライブラリを使わず、実際のTCPソケットで部屋作成、複数人参加、描画同期、権限制御、ゲーム進行、得点、切断処理まで確認できます。
+
+```bash
+./scripts/test.sh
+```
+
+`ProtocolIntegrationTest: PASS`と`ClientDispatchTest: PASS`が表示されれば成功です。
+
 ## 補足
 
 - `client.draw.DrawLauncher` は描画機能単体を試すための簡易起動クラスです。お絵描き部分だけ確認したい場合はこちらも利用できます。

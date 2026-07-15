@@ -2,6 +2,7 @@ package server;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import common.Protocol;
 // 以下の3つは各メンバーが作成するクラス
 import server.room.RoomManager;
@@ -21,11 +22,11 @@ public class ClientHandler implements Runnable {
             // 先生のプログラム例のストリーム作成部分を踏襲
             this.in = new BufferedReader(
                             new InputStreamReader(
-                                socket.getInputStream()));
+                                socket.getInputStream(), StandardCharsets.UTF_8));
             this.out = new PrintWriter(
                              new BufferedWriter(
                                  new OutputStreamWriter(
-                                     socket.getOutputStream())), true);
+                                     socket.getOutputStream(), StandardCharsets.UTF_8)), true);
         } catch (IOException e) {
             System.err.println("ストリームの初期化に失敗しました: " + e.getMessage());
         }

@@ -71,6 +71,9 @@ public class ClientHandler implements Runnable {
                     case Protocol.DRAW_DATA:
                         DrawManager.handleDrawData(this, data);
                         break;
+                    case Protocol.DRAW_CLEAR:
+                        DrawManager.handleClear(this, data);
+                        break;
 
                     // ==========================================
                     // Cさんの領域 (回答・判定・進行)
@@ -120,4 +123,5 @@ public class ClientHandler implements Runnable {
     // プレイヤー名を保持・取得するアクセサ（Cさんのスコア管理などで便利）
     public String getUserName() { return userName; }
     public void setUserName(String userName) { this.userName = userName; }
+
 }

@@ -52,6 +52,9 @@ public class GameClient {
                         case Protocol.DRAW_RECEIVED:
                             DrawController.onDrawReceived(data);
                             break;
+                        case Protocol.DRAW_CLEAR_RECEIVED:
+                            DrawController.onClearReceived();
+                            break;
                         case Protocol.GAME_ROUND_START:
                         case Protocol.GAME_SCORE_UPDATE:
                             GameController.onGameUpdate(command, data);

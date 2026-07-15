@@ -6,6 +6,7 @@ import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 
 import client.GameClient;
+import client.ui.UITheme;
 
 public class RoomLauncher {
     public static void main(String[] args) {
@@ -27,13 +28,15 @@ public class RoomLauncher {
     }
 
     private static void buildAndShow(GameClient client, String initialStatus) {
+        UITheme.install();
         RoomPanel panel = new RoomPanel();
         RoomController.init(client, panel);
 
         JFrame frame = new JFrame("お絵描きの森 - ロビー");
         frame.setLayout(new BorderLayout());
         frame.add(panel, BorderLayout.CENTER);
-        frame.setSize(640, 420);
+        frame.setSize(980, 680);
+        frame.setMinimumSize(new java.awt.Dimension(820, 580));
         frame.setLocationRelativeTo(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);

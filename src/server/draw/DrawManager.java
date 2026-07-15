@@ -83,4 +83,24 @@ public class DrawManager {
             }
         }
     }
+
+    /** 同じ部屋の全員に、キャンバスを白紙に戻す通知を送る。 */
+    public static void handleClear(ClientHandler client, String data) {
+        String roomId = data == null ? "" : data.trim();
+        if (roomId.isEmpty()) {
+            System.out.println("[DrawManager] 部屋IDのない全消し要求を無視");
+            return;
+        }
+
+        joinRoom(roomId, client);
+        Set<ClientHandler> members = roomMembers.get(roomId);
+        if (members == null) {
+            return;
+        }
+
+        String message = Protocol.DRAW_CLEAR_RECEIVED + ":";
+        for (ClientHandler member : members) {
+            member.sendMessage(message);
+        }
+    }
 }

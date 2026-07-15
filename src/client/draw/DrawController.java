@@ -42,13 +42,25 @@ public class DrawController {
     // ============================================================
     // 送信：DrawPanel から「(x1,y1)→(x2,y2) に color で線を引いた」と通知される
     // ============================================================
-    public static void sendLine(int x1, int y1, int x2, int y2, String color) {
+    public static void sendLine(int x1, int y1, int x2, int y2, String color, float strokeWidth) {
         if (client == null) {
             return; // 未接続（描画のローカル確認のみ）の場合は送らない
         }
         String message = Protocol.DRAW_DATA + ":"
-                + roomId + "," + x1 + "," + y1 + "," + x2 + "," + y2 + "," + color;
+                + roomId + "," + x1 + "," + y1 + "," + x2 + "," + y2 + "," + color
+                + "," + strokeWidth;
         client.sendMessage(message);
+    }
+
+    /** 全員のキャンバスを同期して白紙に戻す。 */
+    public static void sendClear() {
+        if (client == null) {
+            if (panel != null) {
+                panel.clearCanvas();
+            }
+            return;
+        }
+        client.sendMessage(Protocol.DRAW_CLEAR + ":" + roomId);
     }
 
     // ============================================================
@@ -66,11 +78,22 @@ public class DrawController {
             int x2 = Integer.parseInt(p[2].trim());
             int y2 = Integer.parseInt(p[3].trim());
             String color = (p.length > 4) ? p[4].trim() : "BLACK";
+            float strokeWidth = 4.0f;
+            if (p.length > 5) {
+                strokeWidth = Float.parseFloat(p[5].trim());
+            }
+            final float receivedWidth = strokeWidth;
 
             // 受信スレッドからGUIを触らないよう、描画はEDT(イベントディスパッチスレッド)で行う
-            SwingUtilities.invokeLater(() -> panel.drawRemoteLine(x1, y1, x2, y2, color));
+            SwingUtilities.invokeLater(() -> panel.drawRemoteLine(x1, y1, x2, y2, color, receivedWidth));
         } catch (Exception e) {
             System.out.println("[DrawController] 受信データの解析に失敗: " + data);
+        }
+    }
+
+    public static void onClearReceived() {
+        if (panel != null) {
+            SwingUtilities.invokeLater(panel::clearCanvas);
         }
     }
 }

@@ -8,6 +8,7 @@ import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 
 import client.GameClient;
+import common.Protocol;
 
 /**
  * 担当B（お絵描き）の単体テスト用ランチャー。
@@ -36,6 +37,9 @@ public class DrawLauncher {
         GameClient client = new GameClient();
         try {
             client.connect(host, port);
+            String testUser = "DrawPlayer" + Long.toUnsignedString(System.nanoTime(), 36);
+            client.sendMessage(Protocol.ROOM_CREATE + ":" + roomId + "," + testUser);
+            client.sendMessage(Protocol.ROOM_JOIN + ":" + roomId + "," + testUser);
             System.out.println("サーバーに接続しました: " + host + ":" + port + " (room=" + roomId + ")");
         } catch (Exception e) {
             // 接続できなくても、描画自体のローカル確認はできるようにUIは表示する
@@ -62,7 +66,7 @@ public class DrawLauncher {
         addColorButton(toolBar, panel, "消しゴム", "WHITE");
 
         JButton clearButton = new JButton("全消し");
-        clearButton.addActionListener(e -> panel.clearCanvas());
+        clearButton.addActionListener(e -> DrawController.requestClear());
         toolBar.add(clearButton);
 
         JFrame frame = new JFrame("お絵描きの森 - お絵描き (room: " + roomId + ")");

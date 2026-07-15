@@ -12,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import common.Protocol;
 import server.ClientHandler;
 import server.draw.DrawManager;
+import server.game.GameManager;
 
 public class RoomManager {
     private static final int MAX_ROOM_NAME_LENGTH = 30;
@@ -29,6 +30,13 @@ public class RoomManager {
         String error = validateRoomName(request.roomName);
         if (error != null) {
             sendError(client, error);
+            sendRoomList(client);
+            return;
+        }
+
+        String transitionError = validateRoomTransition(client, request.roomName);
+        if (transitionError != null) {
+            sendError(client, transitionError);
             sendRoomList(client);
             return;
         }
@@ -57,6 +65,8 @@ public class RoomManager {
 
         broadcastMembers(request.roomName);
         broadcastRoomList();
+        GameManager.onRoomMembershipChanged(previousRoom);
+        GameManager.onRoomMembershipChanged(request.roomName);
     }
 
     public static void handleJoinRoom(ClientHandler client, String data) {
@@ -66,6 +76,13 @@ public class RoomManager {
         String error = validateRoomName(request.roomName);
         if (error != null) {
             sendError(client, error);
+            sendRoomList(client);
+            return;
+        }
+
+        String transitionError = validateRoomTransition(client, request.roomName);
+        if (transitionError != null) {
+            sendError(client, transitionError);
             sendRoomList(client);
             return;
         }
@@ -92,6 +109,8 @@ public class RoomManager {
 
         broadcastMembers(request.roomName);
         broadcastRoomList();
+        GameManager.onRoomMembershipChanged(previousRoom);
+        GameManager.onRoomMembershipChanged(request.roomName);
     }
 
     public static void handleRoomListRequest(ClientHandler client) {
@@ -125,6 +144,7 @@ public class RoomManager {
         if (oldRoomName != null) {
             broadcastMembers(oldRoomName);
             broadcastRoomList();
+            GameManager.onRoomMembershipChanged(oldRoomName);
         }
     }
 
@@ -213,6 +233,17 @@ public class RoomManager {
         String userName = parts.length > 1 ? parts[1].trim() : "";
 
         return new RoomRequest(roomName, userName);
+    }
+
+    private static String validateRoomTransition(ClientHandler client, String targetRoom) {
+        String currentRoom = clientRooms.get(client);
+        if (currentRoom != null && GameManager.isGameActive(currentRoom)) {
+            return "ゲーム中は部屋を移動・再参加できません";
+        }
+        if (GameManager.isGameActive(targetRoom)) {
+            return "ゲーム進行中の部屋には参加できません";
+        }
+        return null;
     }
 
     private static String validateRoomName(String roomName) {

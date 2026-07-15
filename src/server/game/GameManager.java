@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -27,6 +26,47 @@ public class GameManager {
         "apple", "dog", "car", "tree", "house", "book", "soccer", "piano",
         "mountain", "coffee", "robot", "flower"
     };
+
+    /** ルーム移動や途中入室を拒否するためにRoomManagerから参照する。 */
+    public static boolean isGameActive(String roomName) {
+        synchronized (LOCK) {
+            return roomName != null && games.containsKey(roomName);
+        }
+    }
+
+    /** 描画は待機中の正式メンバー、または進行中ラウンドのDrawerだけに許可する。 */
+    public static boolean canDraw(ClientHandler client, String roomName) {
+        synchronized (LOCK) {
+            RoomGame game = games.get(roomName);
+            if (game == null) {
+                return true;
+            }
+            return game.roundActive && client.getUserName().equals(game.drawerName);
+        }
+    }
+
+    /** 入退室後に準備済み人数を現在のメンバー構成へ同期する。 */
+    public static void onRoomMembershipChanged(String roomName) {
+        if (roomName == null || roomName.isEmpty()) {
+            return;
+        }
+        synchronized (LOCK) {
+            if (games.containsKey(roomName)) {
+                return;
+            }
+            Set<String> ready = readySets.get(roomName);
+            if (ready == null) {
+                return;
+            }
+            Set<String> liveNames = liveMemberNames(roomName, null);
+            ready.retainAll(liveNames);
+            if (liveNames.isEmpty()) {
+                readySets.remove(roomName);
+                return;
+            }
+            broadcastReady(roomName, ready, liveNames.size());
+        }
+    }
 
     public static void handleGameStart(ClientHandler client, String data) {
         String roomName = clean(data);
@@ -142,30 +182,35 @@ public class GameManager {
 
     public static void removeClient(ClientHandler client) {
         synchronized (LOCK) {
+            String roomName = RoomManager.getRoomOf(client);
             String userName = client.getUserName();
-            for (Set<String> ready : readySets.values()) {
+            Set<String> ready = readySets.get(roomName);
+            if (ready != null) {
                 ready.remove(userName);
+                Set<String> remainingNames = liveMemberNames(roomName, client);
+                ready.retainAll(remainingNames);
+                if (remainingNames.isEmpty()) {
+                    readySets.remove(roomName);
+                } else {
+                    broadcastReady(roomName, ready, remainingNames.size());
+                }
             }
 
-            for (Iterator<Map.Entry<String, RoomGame>> it = games.entrySet().iterator(); it.hasNext();) {
-                Map.Entry<String, RoomGame> entry = it.next();
-                RoomGame game = entry.getValue();
-                if (!game.activePlayers.remove(client.getUserName())) {
-                    continue;
-                }
+            RoomGame game = games.get(roomName);
+            if (game == null || !game.activePlayers.remove(userName)) {
+                return;
+            }
 
-                refreshMembersLocked(game);
-                if (game.activePlayers.isEmpty()) {
-                    game.cancelTimer();
-                    it.remove();
-                    continue;
-                }
+            game.correctUsers.remove(userName);
+            game.correctCount = game.correctUsers.size();
+            game.guesserCount = Math.max(0, game.activePlayers.size() - 1);
 
-                if (client.getUserName().equals(game.drawerName)) {
-                    finishRoundLocked(game, "drawer_left");
-                } else if (game.roundActive && allGuessersCorrect(game)) {
-                    finishRoundLocked(game, "all_correct");
-                }
+            if (game.activePlayers.size() < 2) {
+                abortGameLocked(game, "player_left");
+            } else if (userName.equals(game.drawerName)) {
+                finishRoundLocked(game, "drawer_left");
+            } else if (game.roundActive && allGuessersCorrect(game)) {
+                finishRoundLocked(game, "all_correct");
             }
         }
     }
@@ -194,7 +239,7 @@ public class GameManager {
 
         game.cancelTimer();
         game.timer = new Timer(true);
-        game.timer.scheduleAtFixedRate(new TimerTask() {
+        game.timer.schedule(new TimerTask() {
             @Override
             public void run() {
                 onTimer(game.roomName);
@@ -297,6 +342,18 @@ public class GameManager {
         RoomManager.broadcastToRoom(game.roomName, Protocol.GAME_END + ":" + game.buildScoreText());
     }
 
+    private static void abortGameLocked(RoomGame game, String reason) {
+        game.cancelTimer();
+        if (game.roundActive && game.currentTheme != null) {
+            game.roundActive = false;
+            RoomManager.broadcastToRoom(game.roomName,
+                    Protocol.GAME_ROUND_END + ":" + reason + "," + game.currentTheme.getDisplayName());
+            broadcastScores(game);
+        }
+        games.remove(game.roomName);
+        RoomManager.broadcastToRoom(game.roomName, Protocol.GAME_END + ":" + game.buildScoreText());
+    }
+
     private static void sendRoundStart(RoomGame game) {
         int totalRounds = game.drawingOrder.size();
         int roundNumber = Math.min(game.drawerIndex, totalRounds);
@@ -349,6 +406,16 @@ public class GameManager {
     private static List<ClientHandler> liveMembers(String roomName) {
         List<ClientHandler> members = RoomManager.getRoomMembers(roomName);
         return members == null ? Collections.emptyList() : members;
+    }
+
+    private static Set<String> liveMemberNames(String roomName, ClientHandler excluded) {
+        Set<String> names = new HashSet<>();
+        for (ClientHandler member : RoomManager.getRoomMembers(roomName)) {
+            if (member != excluded) {
+                names.add(member.getUserName());
+            }
+        }
+        return names;
     }
 
     private static boolean isMemberOfRoom(ClientHandler client, String roomName) {

@@ -79,6 +79,8 @@ public final class ProtocolIntegrationTest {
             second.guesser.expectPrefix(Protocol.GAME_JUDGE_RESULT + ":CORRECT", 2_000);
             alice.expectPrefix(Protocol.GAME_ROUND_END + ":all_correct", 2_000);
             bob.expectPrefix(Protocol.GAME_ROUND_END + ":all_correct", 2_000);
+            alice.expectPrefix(Protocol.GAME_READY_UPDATE + ":0,2", 2_000);
+            bob.expectPrefix(Protocol.GAME_READY_UPDATE + ":0,2", 2_000);
             alice.expectPrefix(Protocol.GAME_END + ":", 2_000);
             bob.expectPrefix(Protocol.GAME_END + ":", 2_000);
 
@@ -118,6 +120,7 @@ public final class ProtocolIntegrationTest {
 
             round.drawer.end();
             round.guesser.expectPrefix(Protocol.GAME_ROUND_END + ":player_left", 2_000);
+            round.guesser.expectPrefix(Protocol.GAME_READY_UPDATE + ":0,1", 2_000);
             round.guesser.expectPrefix(Protocol.GAME_END + ":", 2_000);
 
             // 切断処理後も残ったクライアントのハンドラーが応答できることを確認する。

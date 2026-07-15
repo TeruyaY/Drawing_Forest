@@ -7,6 +7,7 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -40,11 +41,21 @@ public class ChatPanel extends JPanel {
         themeLabel.setFont(themeLabel.getFont().deriveFont(Font.BOLD));
         timerLabel.setFont(timerLabel.getFont().deriveFont(Font.BOLD, 15f));
 
-        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        JPanel roleRow = statusRow();
+        roleRow.add(roleLabel);
+        JPanel themeRow = statusRow();
+        themeRow.add(themeLabel);
+        JPanel timeRow = statusRow();
+        timeRow.add(timerLabel);
+
+        // チャット欄はスコア欄と横幅を分け合うため特に狭い。
+        // FlowLayout任せの折り返しでは下段が切れるので、各情報を固定の行に置く。
+        JPanel statusPanel = new JPanel();
+        statusPanel.setLayout(new BoxLayout(statusPanel, BoxLayout.Y_AXIS));
         statusPanel.setBackground(UiTheme.BACKGROUND);
-        statusPanel.add(roleLabel);
-        statusPanel.add(themeLabel);
-        statusPanel.add(timerLabel);
+        statusPanel.add(roleRow);
+        statusPanel.add(themeRow);
+        statusPanel.add(timeRow);
         add(statusPanel, BorderLayout.NORTH);
 
         add(new JScrollPane(chatList), BorderLayout.CENTER);
@@ -80,11 +91,13 @@ public class ChatPanel extends JPanel {
         roleLabel.setText("Role: " + role + " / Drawer: " + drawerName);
         roleLabel.setForeground("DRAWER".equals(role) ? UiTheme.DRAWER : UiTheme.GUESSER);
         themeLabel.setText(theme == null || theme.isEmpty() ? "Theme: (guessers can't see this)" : "Theme: " + theme);
+        refreshStatusLayout();
     }
 
     public void setTimeRemaining(int seconds) {
         timerLabel.setText("Time: " + seconds);
         timerLabel.setForeground(seconds <= 10 ? UiTheme.DANGER : UiTheme.PRIMARY_DARK);
+        refreshStatusLayout();
     }
 
     public void showResult(String message) {
@@ -104,6 +117,18 @@ public class ChatPanel extends JPanel {
             return UiTheme.DANGER;
         }
         return Color.DARK_GRAY;
+    }
+
+    private JPanel statusRow() {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        row.setBackground(UiTheme.BACKGROUND);
+        return row;
+    }
+
+    private void refreshStatusLayout() {
+        revalidate();
+        repaint();
     }
 
     private void send(ActionEvent event) {

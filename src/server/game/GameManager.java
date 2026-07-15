@@ -339,6 +339,7 @@ public class GameManager {
     private static void finishGameLocked(RoomGame game) {
         game.cancelTimer();
         games.remove(game.roomName);
+        broadcastReadyReset(game.roomName, game.activePlayers.size());
         RoomManager.broadcastToRoom(game.roomName, Protocol.GAME_END + ":" + game.buildScoreText());
     }
 
@@ -351,7 +352,13 @@ public class GameManager {
             broadcastScores(game);
         }
         games.remove(game.roomName);
+        broadcastReadyReset(game.roomName, game.activePlayers.size());
         RoomManager.broadcastToRoom(game.roomName, Protocol.GAME_END + ":" + game.buildScoreText());
+    }
+
+    private static void broadcastReadyReset(String roomName, int memberCount) {
+        readySets.remove(roomName);
+        broadcastReady(roomName, Collections.emptySet(), memberCount);
     }
 
     private static void sendRoundStart(RoomGame game) {

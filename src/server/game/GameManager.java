@@ -1,261 +1,383 @@
 package server.game;
 
-import common.Protocol;
-import server.ClientHandler;
-import server.room.RoomManager;
-
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import common.Protocol;
+import server.ClientHandler;
+import server.room.RoomManager;
 
 public class GameManager {
-
-    // 部屋IDごとに「現在のお題」を保存する
-    private static final Map<String, String> currentThemes = new HashMap<>();
-
-    // 部屋IDごとに「現在の描く人」を保存する
-    private static final Map<String, String> drawersByRoom = new HashMap<>();
-
-    // 部屋IDごとに「すでに正解したユーザー」を保存する
-    private static final Map<String, Set<String>> correctUsersByRoom = new HashMap<>();
-
-    // 部屋IDごとに「ユーザーごとのスコア」を保存する
-    private static final Map<String, Map<String, Integer>> scoresByRoom = new HashMap<>();
-
-    // 出題するお題リスト
-    private static final List<String> themes = Arrays.asList(
-            "りんご",
-            "ねこ",
-            "いぬ",
-            "くるま",
-            "さかな",
-            "バナナ",
-            "時計",
-            "学校",
-            "飛行機",
-            "パソコン"
-    );
-
-    // ランダムにお題・描く人を選ぶための部品
-    private static final Random random = new Random();
+    private static final int ROUND_TIME_SECONDS = 60;
+    private static final int MAX_CHAT_LENGTH = 120;
+    private static final Object LOCK = new Object();
+    private static final Map<String, RoomGame> games = new HashMap<>();
+    private static final Random RANDOM = new Random();
+    private static final String[] THEMES = {
+        "apple", "dog", "car", "tree", "house", "book", "soccer", "piano",
+        "mountain", "coffee", "robot", "flower"
+    };
 
     public static void handleGameStart(ClientHandler client, String data) {
-        // dataには部屋IDが入っている想定
-        // 例: GAME_START:room1 の場合、data = "room1"
-        String roomId = data.trim();
-
-        if (roomId.isEmpty()) {
-            client.sendMessage(Protocol.ROOM_ERROR + ":部屋IDが空です");
+        String roomName = clean(data);
+        if (!isMemberOfRoom(client, roomName)) {
+            client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":ERROR,room membership required");
             return;
         }
 
-        List<ClientHandler> members = RoomManager.getRoomMembers(roomId);
-
-        if (members.size() < 2) {
-            client.sendMessage(Protocol.ROOM_ERROR + ":ゲーム開始には2人以上必要です");
-            return;
-        }
-
-        // お題リストからランダムに1つ選ぶ
-        String theme = themes.get(random.nextInt(themes.size()));
-
-        // 部屋メンバーからランダムに描く人を1人選ぶ
-        ClientHandler drawer = members.get(random.nextInt(members.size()));
-        String drawerName = drawer.getUserName();
-
-        // この部屋の現在のお題・描く人を保存する
-        currentThemes.put(roomId, theme);
-        drawersByRoom.put(roomId, drawerName);
-
-        // この部屋の正解済みユーザーを初期化する
-        correctUsersByRoom.put(roomId, new HashSet<>());
-
-        // この部屋のスコア表を用意し、参加者を初期化する
-        Map<String, Integer> roomScores = scoresByRoom.get(roomId);
-        if (roomScores == null) {
-            roomScores = new HashMap<>();
-            scoresByRoom.put(roomId, roomScores);
-        }
-
-        for (ClientHandler member : members) {
-            roomScores.putIfAbsent(member.getUserName(), 0);
-        }
-
-        // 描く人にはお題を送る
-        drawer.sendMessage(Protocol.GAME_ROUND_START + ":DRAWER," + theme);
-
-        // 当てる人にはお題を送らず、描く人の名前だけ送る
-        for (ClientHandler member : members) {
-            if (member != drawer) {
-                member.sendMessage(Protocol.GAME_ROUND_START + ":GUESSER," + drawerName);
+        synchronized (LOCK) {
+            List<ClientHandler> members = liveMembers(roomName);
+            if (members.size() < 2) {
+                client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":ERROR,need at least 2 players");
+                return;
             }
-        }
 
-        // 全員にスコア初期状態を送る
-        RoomManager.broadcastToRoom(
-                roomId,
-                Protocol.GAME_SCORE_UPDATE + ":" + buildScoreText(roomScores)
-        );
+            RoomGame oldGame = games.remove(roomName);
+            if (oldGame != null) {
+                oldGame.cancelTimer();
+            }
+
+            RoomGame game = new RoomGame(roomName, members);
+            games.put(roomName, game);
+            startRoundLocked(game);
+        }
     }
 
     public static void handleChatSubmit(ClientHandler client, String data) {
-        // dataには「部屋ID,発言内容」が入っている想定
-        // 例: CHAT_SUBMIT:room1,りんご の場合、data = "room1,りんご"
-        String[] parts = data.split(",", 2);
-
-        if (parts.length < 2) {
-            client.sendMessage(Protocol.ROOM_ERROR + ":回答形式が不正です");
+        ChatRequest request = parseChatRequest(data);
+        if (!isMemberOfRoom(client, request.roomName)) {
+            client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":ERROR,room membership required");
             return;
         }
 
-        String roomId = parts[0].trim();
-        String answer = parts[1].trim();
-
-        if (roomId.isEmpty()) {
-            client.sendMessage(Protocol.ROOM_ERROR + ":部屋IDが空です");
+        String message = limit(clean(request.message), MAX_CHAT_LENGTH);
+        if (message.isEmpty()) {
             return;
         }
 
-        if (answer.isEmpty()) {
-            client.sendMessage(Protocol.ROOM_ERROR + ":回答が空です");
-            return;
-        }
-
-        // 現在のお題を取得する
-        String currentTheme = currentThemes.get(roomId);
-
-        if (currentTheme == null) {
-            client.sendMessage(Protocol.ROOM_ERROR + ":ゲームが開始されていません");
-            return;
-        }
-
-        String userName = client.getUserName();
-        String drawerName = drawersByRoom.get(roomId);
-
-        // 描く人の発言は回答として判定しない
-        if (userName.equals(drawerName)) {
-            return;
-        }
-
-        // この部屋の正解済みユーザー一覧を取得する
-        Set<String> correctUsers = correctUsersByRoom.get(roomId);
-
-        if (correctUsers == null) {
-            correctUsers = new HashSet<>();
-            correctUsersByRoom.put(roomId, correctUsers);
-        }
-
-        // すでに正解した人には二重加点しない
-        if (correctUsers.contains(userName)) {
-            RoomManager.broadcastToRoom(
-                    roomId,
-                    Protocol.GAME_JUDGE_RESULT + ":" + userName + ",ALREADY_CORRECT," + answer
-            );
-            return;
-        }
-
-        // 回答とお題を比較する
-        boolean isCorrect = normalize(answer).equals(normalize(currentTheme));
-
-        if (isCorrect) {
-            // 正解済みユーザーとして登録
-            correctUsers.add(userName);
-
-            // スコア表を取得
-            Map<String, Integer> roomScores = scoresByRoom.get(roomId);
-
-            if (roomScores == null) {
-                roomScores = new HashMap<>();
-                scoresByRoom.put(roomId, roomScores);
+        synchronized (LOCK) {
+            RoomGame game = games.get(request.roomName);
+            if (game == null || !game.roundActive) {
+                RoomManager.broadcastToRoom(request.roomName,
+                        Protocol.CHAT_BROADCAST + ":" + client.getUserName() + "," + message);
+                return;
             }
 
-            // 正解した人に100点加算
-            int currentScore = roomScores.getOrDefault(userName, 0);
-            roomScores.put(userName, currentScore + 100);
-
-            // 正解通知を同じ部屋の全員に送る
-            RoomManager.broadcastToRoom(
-                    roomId,
-                    Protocol.GAME_JUDGE_RESULT + ":" + userName + ",CORRECT," + answer
-            );
-
-            // スコア更新を同じ部屋の全員に送る
-            RoomManager.broadcastToRoom(
-                    roomId,
-                    Protocol.GAME_SCORE_UPDATE + ":" + buildScoreText(roomScores)
-            );
-
-            // 描く人以外が全員正解したらラウンド終了
-            if (isAllGuessersCorrect(roomId)) {
-                RoomManager.broadcastToRoom(
-                        roomId,
-                        Protocol.GAME_ROUND_END + ":" + currentTheme
-                );
-
-                currentThemes.remove(roomId);
-                drawersByRoom.remove(roomId);
-                correctUsersByRoom.remove(roomId);
+            refreshMembersLocked(game);
+            if (!game.activePlayers.contains(client.getUserName())) {
+                client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":ERROR,not in active game");
+                return;
             }
 
-        } else {
-            // 不正解通知を同じ部屋の全員に送る
-            RoomManager.broadcastToRoom(
-                    roomId,
-                    Protocol.GAME_JUDGE_RESULT + ":" + userName + ",WRONG," + answer
-            );
+            if (client.getUserName().equals(game.drawerName)) {
+                RoomManager.broadcastToRoom(request.roomName,
+                        Protocol.CHAT_BROADCAST + ":" + client.getUserName() + "," + message);
+                return;
+            }
+
+            if (game.correctUsers.contains(client.getUserName())) {
+                client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":ALREADY_CORRECT,0");
+                return;
+            }
+
+            if (game.currentTheme.isCorrect(message)) {
+                int points = calculatePoints(game);
+                game.correctUsers.add(client.getUserName());
+                game.correctCount++;
+                game.addScore(client.getUserName(), points);
+                boolean roundComplete = allGuessersCorrect(game);
+
+                client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":CORRECT," + points);
+                broadcastScores(game);
+
+                if (roundComplete) {
+                    finishRoundAsync(request.roomName, game, "all_correct");
+                }
+
+                if (!roundComplete) {
+                    RoomManager.broadcastToRoom(request.roomName,
+                            Protocol.CHAT_BROADCAST + ":" + client.getUserName() + ",guessed correctly");
+                }
+            } else {
+                client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":WRONG,0");
+                RoomManager.broadcastToRoom(request.roomName,
+                        Protocol.CHAT_BROADCAST + ":" + client.getUserName() + "," + message);
+            }
         }
     }
 
-    private static boolean isAllGuessersCorrect(String roomId) {
-        List<ClientHandler> members = RoomManager.getRoomMembers(roomId);
-        String drawerName = drawersByRoom.get(roomId);
-        Set<String> correctUsers = correctUsersByRoom.get(roomId);
+    public static void removeClient(ClientHandler client) {
+        synchronized (LOCK) {
+            for (Iterator<Map.Entry<String, RoomGame>> it = games.entrySet().iterator(); it.hasNext();) {
+                Map.Entry<String, RoomGame> entry = it.next();
+                RoomGame game = entry.getValue();
+                if (!game.activePlayers.remove(client.getUserName())) {
+                    continue;
+                }
 
-        if (drawerName == null || correctUsers == null) {
-            return false;
-        }
+                refreshMembersLocked(game);
+                if (game.activePlayers.isEmpty()) {
+                    game.cancelTimer();
+                    it.remove();
+                    continue;
+                }
 
-        int guesserCount = 0;
-
-        for (ClientHandler member : members) {
-            String memberName = member.getUserName();
-
-            if (!memberName.equals(drawerName)) {
-                guesserCount++;
+                if (client.getUserName().equals(game.drawerName)) {
+                    finishRoundLocked(game, "drawer_left");
+                } else if (game.roundActive && allGuessersCorrect(game)) {
+                    finishRoundLocked(game, "all_correct");
+                }
             }
         }
-
-        return guesserCount > 0 && correctUsers.size() >= guesserCount;
     }
 
-    private static String normalize(String text) {
-        if (text == null) {
-            return "";
+    private static void startRoundLocked(RoomGame game) {
+        refreshMembersLocked(game);
+        if (game.activePlayers.size() < 2 || game.drawerIndex >= game.drawingOrder.size()) {
+            finishGameLocked(game);
+            return;
         }
 
-        return text.trim()
-                .replace(" ", "")
-                .replace("　", "")
-                .toLowerCase();
+        String nextDrawer = findNextDrawer(game);
+        if (nextDrawer == null) {
+            finishGameLocked(game);
+            return;
+        }
+
+        game.drawerName = nextDrawer;
+        game.currentTheme = randomTheme();
+        game.correctUsers.clear();
+        game.correctCount = 0;
+        game.guesserCount = Math.max(0, game.activePlayers.size() - 1);
+        game.roundStartMillis = System.currentTimeMillis();
+        game.roundActive = true;
+
+        game.cancelTimer();
+        game.timer = new Timer(true);
+        game.timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                onTimer(game.roomName);
+            }
+        }, 0, 1000);
+
+        sendRoundStart(game);
+        broadcastScores(game);
     }
 
-    private static String buildScoreText(Map<String, Integer> roomScores) {
-        StringBuilder sb = new StringBuilder();
+    private static String findNextDrawer(RoomGame game) {
+        while (game.drawerIndex < game.drawingOrder.size()) {
+            String candidate = game.drawingOrder.get(game.drawerIndex);
+            game.drawerIndex++;
+            if (game.activePlayers.contains(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
 
-        for (Map.Entry<String, Integer> entry : roomScores.entrySet()) {
-            if (sb.length() > 0) {
-                sb.append(";");
+    private static void onTimer(String roomName) {
+        synchronized (LOCK) {
+            RoomGame game = games.get(roomName);
+            if (game == null || !game.roundActive) {
+                return;
             }
 
-            sb.append(entry.getKey())
-                    .append("=")
-                    .append(entry.getValue());
+            refreshMembersLocked(game);
+            int remaining = remainingSeconds(game);
+            RoomManager.broadcastToRoom(roomName, Protocol.GAME_TIME_UPDATE + ":" + remaining);
+
+            if (remaining <= 0) {
+                finishRoundLocked(game, "time_up");
+            }
+        }
+    }
+
+    private static void finishRoundLocked(RoomGame game, String reason) {
+        if (!game.roundActive) {
+            return;
         }
 
-        return sb.toString();
+        game.roundActive = false;
+        RoomManager.broadcastToRoom(game.roomName,
+                Protocol.GAME_ROUND_END + ":" + reason + "," + game.currentTheme.getDisplayName());
+
+        if (game.drawerIndex >= game.drawingOrder.size()) {
+            finishGameLocked(game);
+            game.cancelTimer();
+            return;
+        }
+
+        game.cancelTimer();
+        Timer nextRoundTimer = new Timer(true);
+        nextRoundTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                synchronized (LOCK) {
+                    RoomGame current = games.get(game.roomName);
+                    if (current == game && !current.roundActive) {
+                        startRoundLocked(current);
+                    }
+                }
+            }
+        }, 3000);
+    }
+
+    private static void finishRoundAsync(String roomName, RoomGame expectedGame, String reason) {
+        Thread thread = new Thread(() -> {
+            synchronized (LOCK) {
+                RoomGame current = games.get(roomName);
+                if (current == expectedGame) {
+                    finishRoundLocked(current, reason);
+                }
+            }
+        }, "game-round-finish-" + roomName);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static void finishGameLocked(RoomGame game) {
+        game.cancelTimer();
+        games.remove(game.roomName);
+        RoomManager.broadcastToRoom(game.roomName, Protocol.GAME_END + ":" + game.buildScoreText());
+    }
+
+    private static void sendRoundStart(RoomGame game) {
+        int totalRounds = game.drawingOrder.size();
+        int roundNumber = Math.min(game.drawerIndex, totalRounds);
+
+        for (ClientHandler member : RoomManager.getRoomMembers(game.roomName)) {
+            String role = member.getUserName().equals(game.drawerName) ? "DRAWER" : "GUESSER";
+            String theme = "DRAWER".equals(role) ? game.currentTheme.getDisplayName() : "";
+            member.sendMessage(Protocol.GAME_ROUND_START + ":"
+                    + game.roomName + "," + roundNumber + "," + totalRounds + ","
+                    + game.drawerName + "," + role + "," + theme + "," + ROUND_TIME_SECONDS);
+        }
+    }
+
+    private static void broadcastScores(RoomGame game) {
+        RoomManager.broadcastToRoom(game.roomName,
+                Protocol.GAME_SCORE_UPDATE + ":" + game.buildScoreText());
+    }
+
+    private static boolean allGuessersCorrect(RoomGame game) {
+        return game.correctCount >= game.guesserCount;
+    }
+
+    private static int calculatePoints(RoomGame game) {
+        int elapsed = (int) ((System.currentTimeMillis() - game.roundStartMillis) / 1000L);
+        int remaining = Math.max(0, ROUND_TIME_SECONDS - elapsed);
+        return 100 + remaining * 10;
+    }
+
+    private static int remainingSeconds(RoomGame game) {
+        int elapsed = (int) ((System.currentTimeMillis() - game.roundStartMillis) / 1000L);
+        return Math.max(0, ROUND_TIME_SECONDS - elapsed);
+    }
+
+    private static Theme randomTheme() {
+        String word = THEMES[RANDOM.nextInt(THEMES.length)];
+        List<String> accepted = new ArrayList<>();
+        accepted.add(word);
+        return new Theme(word, accepted);
+    }
+
+    private static void refreshMembersLocked(RoomGame game) {
+        Set<String> liveNames = new HashSet<>();
+        for (ClientHandler member : RoomManager.getRoomMembers(game.roomName)) {
+            liveNames.add(member.getUserName());
+            game.scores.putIfAbsent(member.getUserName(), 0);
+        }
+        game.activePlayers.retainAll(liveNames);
+    }
+
+    private static List<ClientHandler> liveMembers(String roomName) {
+        List<ClientHandler> members = RoomManager.getRoomMembers(roomName);
+        return members == null ? Collections.emptyList() : members;
+    }
+
+    private static boolean isMemberOfRoom(ClientHandler client, String roomName) {
+        return roomName != null && !roomName.isEmpty() && roomName.equals(RoomManager.getRoomOf(client));
+    }
+
+    private static ChatRequest parseChatRequest(String data) {
+        String[] parts = data == null ? new String[0] : data.split(",", 2);
+        String roomName = parts.length > 0 ? clean(parts[0]) : "";
+        String message = parts.length > 1 ? parts[1] : "";
+        return new ChatRequest(roomName, message);
+    }
+
+    private static String clean(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String limit(String value, int maxLength) {
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
+    }
+
+    private static class ChatRequest {
+        private final String roomName;
+        private final String message;
+
+        private ChatRequest(String roomName, String message) {
+            this.roomName = roomName;
+            this.message = message;
+        }
+    }
+
+    private static class RoomGame {
+        private final String roomName;
+        private final List<String> drawingOrder = new ArrayList<>();
+        private final Set<String> activePlayers = new HashSet<>();
+        private final Set<String> correctUsers = new HashSet<>();
+        private final Map<String, Integer> scores = new HashMap<>();
+        private int drawerIndex;
+        private String drawerName;
+        private Theme currentTheme;
+        private long roundStartMillis;
+        private boolean roundActive;
+        private int guesserCount;
+        private int correctCount;
+        private Timer timer;
+
+        private RoomGame(String roomName, List<ClientHandler> members) {
+            this.roomName = roomName;
+            for (ClientHandler member : members) {
+                drawingOrder.add(member.getUserName());
+                activePlayers.add(member.getUserName());
+                scores.put(member.getUserName(), 0);
+            }
+            Collections.shuffle(drawingOrder, RANDOM);
+        }
+
+        private void addScore(String userName, int points) {
+            scores.put(userName, scores.getOrDefault(userName, 0) + points);
+        }
+
+        private String buildScoreText() {
+            List<String> names = new ArrayList<>(scores.keySet());
+            Collections.sort(names);
+            List<String> entries = new ArrayList<>();
+            for (String name : names) {
+                entries.add(name + "=" + scores.getOrDefault(name, 0));
+            }
+            return String.join(";", entries);
+        }
+
+        private void cancelTimer() {
+            if (timer != null) {
+                timer.cancel();
+                timer = null;
+            }
+        }
     }
 }

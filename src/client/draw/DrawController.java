@@ -39,6 +39,43 @@ public class DrawController {
         return roomId;
     }
 
+    /** 担当C(ゲーム進行)から、自分がDrawer役かどうかを教えてもらい、描画の可否を切り替える。 */
+    public static void setDrawingEnabled(boolean enabled) {
+        if (panel != null) {
+            panel.setDrawingEnabled(enabled);
+        }
+    }
+
+    /** 担当C(ゲーム進行)から、新ラウンドが始まったタイミングで呼ばれる。全員のキャンバスを空にする。 */
+    public static void clearForNewRound() {
+        if (panel != null) {
+            panel.clearCanvasFromRemote();
+        }
+    }
+
+    // ============================================================
+    // 送信：DrawPanel の Clearボタンから「キャンバスを消した」と通知される
+    // ============================================================
+    public static void requestClear() {
+        if (panel == null || !panel.isDrawingEnabled()) {
+            return; // Drawer以外はClearできない
+        }
+        panel.clearCanvas();
+        if (client != null) {
+            client.sendMessage(Protocol.DRAW_CLEAR + ":" + roomId);
+        }
+    }
+
+    // ============================================================
+    // 受信：他人がClearを押したという通知がサーバーから届いた
+    // ============================================================
+    public static void onClearReceived() {
+        if (panel == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(panel::clearCanvasFromRemote);
+    }
+
     // ============================================================
     // 送信：DrawPanel から「(x1,y1)→(x2,y2) に color で線を引いた」と通知される
     // ============================================================
@@ -54,13 +91,7 @@ public class DrawController {
 
     /** 全員のキャンバスを同期して白紙に戻す。 */
     public static void sendClear() {
-        if (client == null) {
-            if (panel != null) {
-                panel.clearCanvas();
-            }
-            return;
-        }
-        client.sendMessage(Protocol.DRAW_CLEAR + ":" + roomId);
+        requestClear();
     }
 
     // ============================================================
@@ -91,9 +122,4 @@ public class DrawController {
         }
     }
 
-    public static void onClearReceived() {
-        if (panel != null) {
-            SwingUtilities.invokeLater(panel::clearCanvas);
-        }
-    }
 }

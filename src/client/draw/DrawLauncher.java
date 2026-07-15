@@ -23,7 +23,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import client.GameClient;
-import client.ui.UITheme;
+import client.UiTheme;
 
 /** 担当B（お絵描き）の単体起動用UI。 */
 public class DrawLauncher {
@@ -59,14 +59,14 @@ public class DrawLauncher {
     }
 
     private static void buildAndShow(GameClient client, String roomId, boolean connected) {
-        UITheme.install();
+        UiTheme.install();
         DrawPanel canvas = new DrawPanel();
         DrawController.init(client, canvas);
         DrawController.setRoomId(roomId);
 
         JFrame frame = new JFrame("Drawing Forest | " + roomId);
         JPanel root = new JPanel(new BorderLayout());
-        root.setBackground(UITheme.APP_BACKGROUND);
+        root.setBackground(UiTheme.APP_BACKGROUND);
         root.add(buildHeader(roomId, connected), BorderLayout.NORTH);
         root.add(buildToolDock(canvas), BorderLayout.WEST);
         root.add(canvas, BorderLayout.CENTER);
@@ -83,44 +83,44 @@ public class DrawLauncher {
 
     private static JPanel buildHeader(String roomId, boolean connected) {
         JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setBackground(UITheme.SURFACE);
+        header.setBackground(UiTheme.SURFACE);
         header.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, UITheme.BORDER),
+                BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER),
                 BorderFactory.createEmptyBorder(14, 20, 14, 20)));
 
         JPanel titleGroup = new JPanel(new BorderLayout(10, 0));
         titleGroup.setOpaque(false);
         JLabel title = new JLabel("Drawing Forest");
-        title.setFont(UITheme.TITLE);
+        title.setFont(UiTheme.TITLE);
         titleGroup.add(title, BorderLayout.WEST);
 
         JLabel room = new JLabel("ルーム  " + roomId);
-        room.setFont(UITheme.LABEL);
+        room.setFont(UiTheme.LABEL);
         room.setOpaque(true);
-        room.setBackground(UITheme.SURFACE_MUTED);
+        room.setBackground(UiTheme.SURFACE_MUTED);
         room.setBorder(BorderFactory.createEmptyBorder(7, 11, 7, 11));
         titleGroup.add(room, BorderLayout.CENTER);
         header.add(titleGroup, BorderLayout.WEST);
 
         JLabel role = new JLabel("あなたが描く番です", SwingConstants.CENTER);
-        role.setFont(UITheme.LABEL.deriveFont(15f));
-        role.setForeground(UITheme.ACCENT);
+        role.setFont(UiTheme.LABEL.deriveFont(15f));
+        role.setForeground(UiTheme.ACCENT);
         header.add(role, BorderLayout.CENTER);
 
         JLabel connection = new JLabel(connected ? "●  オンライン" : "○  ローカルモード");
-        connection.setFont(UITheme.LABEL);
-        connection.setForeground(connected ? UITheme.ACCENT : UITheme.TEXT_MUTED);
+        connection.setFont(UiTheme.LABEL);
+        connection.setForeground(connected ? UiTheme.ACCENT : UiTheme.TEXT_MUTED);
         header.add(connection, BorderLayout.EAST);
         return header;
     }
 
-    private static JPanel buildToolDock(DrawPanel canvas) {
+    public static JPanel buildToolDock(DrawPanel canvas) {
         JPanel dock = new JPanel();
         dock.setLayout(new javax.swing.BoxLayout(dock, javax.swing.BoxLayout.Y_AXIS));
-        dock.setBackground(UITheme.SURFACE);
+        dock.setBackground(UiTheme.SURFACE);
         dock.setPreferredSize(new Dimension(184, 0));
         dock.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 0, 1, UITheme.BORDER),
+                BorderFactory.createMatteBorder(0, 0, 0, 1, UiTheme.BORDER),
                 BorderFactory.createEmptyBorder(18, 14, 18, 14)));
 
         JLabel toolsLabel = sectionLabel("ツール");
@@ -194,37 +194,50 @@ public class DrawLauncher {
         dock.add(sizes);
         dock.add(javax.swing.Box.createVerticalGlue());
 
-        JButton clearButton = UITheme.secondaryButton("ボードを全消し");
-        clearButton.setForeground(UITheme.DANGER);
+        JButton clearButton = UiTheme.secondaryButton("ボードを全消し");
+        clearButton.setForeground(UiTheme.DANGER);
         clearButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         clearButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        UITheme.setAccessibleText(clearButton, "ボードを全消し", "全員のキャンバスを白紙に戻します");
+        UiTheme.setAccessibleText(clearButton, "ボードを全消し", "全員のキャンバスを白紙に戻します");
         clearButton.addActionListener(e -> confirmClear(clearButton));
         dock.add(clearButton);
+        canvas.addPropertyChangeListener("drawingEnabled",
+                event -> setControlsEnabled(dock, Boolean.TRUE.equals(event.getNewValue())));
         return dock;
     }
 
     private static JPanel buildFooter(boolean connected) {
         JPanel footer = new JPanel(new BorderLayout());
-        footer.setBackground(UITheme.SURFACE);
+        footer.setBackground(UiTheme.SURFACE);
         footer.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER),
+                BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER),
                 BorderFactory.createEmptyBorder(9, 16, 9, 16)));
         JLabel help = new JLabel("キャンバス上をドラッグして描く   ·   P ペン   E 消しゴム   1〜3 線の太さ");
-        help.setForeground(UITheme.TEXT_MUTED);
+        help.setForeground(UiTheme.TEXT_MUTED);
         footer.add(help, BorderLayout.WEST);
         JLabel sync = new JLabel(connected ? "描画はルーム全員に同期されます" : "接続すると描画が共有されます");
-        sync.setForeground(UITheme.TEXT_MUTED);
+        sync.setForeground(UiTheme.TEXT_MUTED);
         footer.add(sync, BorderLayout.EAST);
         return footer;
     }
 
-    private static void installShortcuts(JComponent root, DrawPanel canvas) {
+    public static void installShortcuts(JComponent root, DrawPanel canvas) {
         bind(root, "P", "pen", () -> clickStoredButton(canvas, "penButton"));
         bind(root, "E", "eraser", () -> clickStoredButton(canvas, "eraserButton"));
         bind(root, "1", "thin", () -> clickStoredButton(canvas, "thinButton"));
         bind(root, "2", "medium", () -> clickStoredButton(canvas, "mediumButton"));
         bind(root, "3", "thick", () -> clickStoredButton(canvas, "thickButton"));
+    }
+
+    private static void setControlsEnabled(Component component, boolean enabled) {
+        if (component instanceof JButton || component instanceof JToggleButton) {
+            component.setEnabled(enabled);
+        }
+        if (component instanceof java.awt.Container) {
+            for (Component child : ((java.awt.Container) component).getComponents()) {
+                setControlsEnabled(child, enabled);
+            }
+        }
     }
 
     private static void clickStoredButton(DrawPanel canvas, String property) {
@@ -246,35 +259,35 @@ public class DrawLauncher {
 
     private static JToggleButton toolButton(String text, String description) {
         JToggleButton button = new JToggleButton(text);
-        button.setFont(UITheme.LABEL);
+        button.setFont(UiTheme.LABEL);
         button.setHorizontalAlignment(SwingConstants.LEFT);
         button.setFocusPainted(true);
         button.setOpaque(true);
-        button.setBackground(UITheme.SURFACE);
-        button.setForeground(UITheme.TEXT);
-        button.setBorder(UITheme.compoundBorder(UITheme.BORDER, 10, 11));
+        button.setBackground(UiTheme.SURFACE);
+        button.setForeground(UiTheme.TEXT);
+        button.setBorder(UiTheme.compoundBorder(UiTheme.BORDER, 10, 11));
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        UITheme.setAccessibleText(button, text, description);
+        UiTheme.setAccessibleText(button, text, description);
         return button;
     }
 
     private static void updateToolSelection(JToggleButton button, boolean selected) {
-        button.setBackground(selected ? UITheme.ACCENT_SOFT : UITheme.SURFACE);
-        button.setForeground(selected ? UITheme.ACCENT : UITheme.TEXT);
-        button.setBorder(UITheme.compoundBorder(selected ? UITheme.ACCENT : UITheme.BORDER, 10, 11));
+        button.setBackground(selected ? UiTheme.ACCENT_SOFT : UiTheme.SURFACE);
+        button.setForeground(selected ? UiTheme.ACCENT : UiTheme.TEXT);
+        button.setBorder(UiTheme.compoundBorder(selected ? UiTheme.ACCENT : UiTheme.BORDER, 10, 11));
     }
 
     private static JToggleButton colorButton(Color color, String label) {
         JToggleButton button = new JToggleButton(label);
         button.putClientProperty("colorLabel", label);
-        button.setFont(UITheme.LABEL);
+        button.setFont(UiTheme.LABEL);
         button.setBackground(color);
         button.setForeground(contrastColor(color));
         button.setFocusPainted(true);
         button.setOpaque(true);
-        button.setBorder(UITheme.compoundBorder(UITheme.BORDER, 8, 6));
-        UITheme.setAccessibleText(button, label + "色", label + "色のペンを選択");
+        button.setBorder(UiTheme.compoundBorder(UiTheme.BORDER, 8, 6));
+        UiTheme.setAccessibleText(button, label + "色", label + "色のペンを選択");
         return button;
     }
 
@@ -284,28 +297,28 @@ public class DrawLauncher {
             String label = String.valueOf(button.getClientProperty("colorLabel"));
             boolean isSelected = button == selected;
             button.setText((isSelected ? "✓ " : "") + label);
-            button.setBorder(UITheme.compoundBorder(isSelected ? UITheme.FOCUS : UITheme.BORDER, 8, 6));
+            button.setBorder(UiTheme.compoundBorder(isSelected ? UiTheme.FOCUS : UiTheme.BORDER, 8, 6));
         }
     }
 
     private static Color contrastColor(Color color) {
         double luminance = 0.2126 * color.getRed() + 0.7152 * color.getGreen() + 0.0722 * color.getBlue();
-        return luminance < 145 ? UITheme.SURFACE : UITheme.TEXT;
+        return luminance < 145 ? UiTheme.SURFACE : UiTheme.TEXT;
     }
 
     private static JToggleButton addSizeButton(JPanel panel, ButtonGroup group, DrawPanel canvas,
             String label, float width, boolean selected) {
         JToggleButton button = new JToggleButton(label);
-        button.setFont(UITheme.LABEL);
+        button.setFont(UiTheme.LABEL);
         button.setFocusPainted(true);
-        button.setBackground(selected ? UITheme.ACCENT_SOFT : UITheme.SURFACE);
-        button.setBorder(UITheme.compoundBorder(selected ? UITheme.ACCENT : UITheme.BORDER, 8, 4));
+        button.setBackground(selected ? UiTheme.ACCENT_SOFT : UiTheme.SURFACE);
+        button.setBorder(UiTheme.compoundBorder(selected ? UiTheme.ACCENT : UiTheme.BORDER, 8, 4));
         button.setSelected(selected);
         button.addActionListener(e -> {
             canvas.setStrokeWidth(width);
             updateSizeSelection(panel, button);
         });
-        UITheme.setAccessibleText(button, label + "い線", label + "い線を選択");
+        UiTheme.setAccessibleText(button, label + "い線", label + "い線を選択");
         group.add(button);
         panel.add(button);
         if (selected) {
@@ -318,16 +331,16 @@ public class DrawLauncher {
         for (Component component : panel.getComponents()) {
             JToggleButton button = (JToggleButton) component;
             boolean isSelected = button == selected;
-            button.setBackground(isSelected ? UITheme.ACCENT_SOFT : UITheme.SURFACE);
-            button.setForeground(isSelected ? UITheme.ACCENT : UITheme.TEXT);
-            button.setBorder(UITheme.compoundBorder(isSelected ? UITheme.ACCENT : UITheme.BORDER, 8, 4));
+            button.setBackground(isSelected ? UiTheme.ACCENT_SOFT : UiTheme.SURFACE);
+            button.setForeground(isSelected ? UiTheme.ACCENT : UiTheme.TEXT);
+            button.setBorder(UiTheme.compoundBorder(isSelected ? UiTheme.ACCENT : UiTheme.BORDER, 8, 4));
         }
     }
 
     private static JLabel sectionLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setFont(UITheme.LABEL);
-        label.setForeground(UITheme.TEXT_MUTED);
+        label.setFont(UiTheme.LABEL);
+        label.setForeground(UiTheme.TEXT_MUTED);
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         return label;
     }
@@ -353,7 +366,7 @@ public class DrawLauncher {
     private static void resetClearButton(JButton button) {
         button.putClientProperty("confirming", false);
         button.setText("ボードを全消し");
-        button.setBackground(UITheme.SURFACE);
+        button.setBackground(UiTheme.SURFACE);
     }
 
     private static int parsePort(String value) {

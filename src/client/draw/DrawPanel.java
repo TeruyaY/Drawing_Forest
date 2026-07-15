@@ -15,7 +15,7 @@ import java.awt.image.BufferedImage;
 
 import javax.swing.JPanel;
 
-import client.ui.UITheme;
+import client.UiTheme;
 
 /**
  * フリーボード型の共同描画キャンバス。
@@ -34,11 +34,12 @@ public class DrawPanel extends JPanel {
     private String currentColor = "BLACK";
     private String lastInkColor = "BLACK";
     private float strokeWidth = 4.0f;
+    private boolean drawingEnabled = true;
 
     public DrawPanel() {
         setPreferredSize(new Dimension(920, 650));
         setMinimumSize(new Dimension(520, 360));
-        setBackground(UITheme.APP_BACKGROUND);
+        setBackground(UiTheme.APP_BACKGROUND);
         setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
         setFocusable(true);
         getAccessibleContext().setAccessibleName("お絵描きキャンバス");
@@ -52,12 +53,19 @@ public class DrawPanel extends JPanel {
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent event) {
+                if (!drawingEnabled) {
+                    return;
+                }
                 requestFocusInWindow();
                 previousCanvasPoint = toCanvasPoint(event.getPoint());
             }
 
             @Override
             public void mouseDragged(MouseEvent event) {
+                if (!drawingEnabled) {
+                    previousCanvasPoint = null;
+                    return;
+                }
                 Point current = toCanvasPoint(event.getPoint());
                 hoverPoint = event.getPoint();
                 if (previousCanvasPoint != null && current != null) {
@@ -134,7 +142,34 @@ public class DrawPanel extends JPanel {
         return strokeWidth;
     }
 
+    public void setDrawingEnabled(boolean enabled) {
+        boolean previous = drawingEnabled;
+        drawingEnabled = enabled;
+        previousCanvasPoint = null;
+        setCursor(Cursor.getPredefinedCursor(enabled ? Cursor.CROSSHAIR_CURSOR : Cursor.DEFAULT_CURSOR));
+        firePropertyChange("drawingEnabled", previous, enabled);
+        getAccessibleContext().setAccessibleDescription(enabled
+                ? "マウスをドラッグして絵を描きます"
+                : "回答者として、描かれている絵を見ます");
+        repaint();
+    }
+
+    public boolean isDrawingEnabled() {
+        return drawingEnabled;
+    }
+
     public void clearCanvas() {
+        if (!drawingEnabled) {
+            return;
+        }
+        clearCanvasInternal();
+    }
+
+    public void clearCanvasFromRemote() {
+        clearCanvasInternal();
+    }
+
+    private void clearCanvasInternal() {
         canvasGraphics.setColor(CANVAS_COLOR);
         canvasGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
         repaint();
@@ -186,16 +221,30 @@ public class DrawPanel extends JPanel {
         g2.setColor(new Color(27, 35, 30, 22));
         g2.fillRoundRect(board.x + 3, board.y + 7, board.width, board.height, 12, 12);
         g2.drawImage(canvas, board.x, board.y, board.width, board.height, null);
-        g2.setColor(UITheme.BORDER);
+        g2.setColor(UiTheme.BORDER);
         g2.drawRoundRect(board.x, board.y, board.width, board.height, 10, 10);
 
-        if (hoverPoint != null && board.contains(hoverPoint)) {
+        if (drawingEnabled && hoverPoint != null && board.contains(hoverPoint)) {
             double visualScale = (double) board.width / CANVAS_W;
             int diameter = Math.max(6, (int) Math.round(strokeWidth * visualScale));
             int radius = diameter / 2;
             g2.setColor(toColor(currentColor));
             g2.setStroke(new BasicStroke(1.4f));
             g2.drawOval(hoverPoint.x - radius, hoverPoint.y - radius, diameter, diameter);
+        }
+        if (!drawingEnabled) {
+            g2.setColor(new Color(27, 35, 30, 26));
+            g2.fillRoundRect(board.x, board.y, board.width, board.height, 10, 10);
+            String message = "回答者は絵を見て答えよう";
+            g2.setFont(UiTheme.LABEL.deriveFont(15f));
+            int textWidth = g2.getFontMetrics().stringWidth(message);
+            int pillWidth = textWidth + 32;
+            int pillX = board.x + (board.width - pillWidth) / 2;
+            int pillY = board.y + 18;
+            g2.setColor(UiTheme.SURFACE);
+            g2.fillRoundRect(pillX, pillY, pillWidth, 38, 18, 18);
+            g2.setColor(UiTheme.TEXT);
+            g2.drawString(message, pillX + 16, pillY + 25);
         }
         g2.dispose();
     }

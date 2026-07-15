@@ -25,7 +25,7 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 
-import client.ui.UITheme;
+import client.UiTheme;
 
 /** ゲーム開始までの流れが一画面で分かるロビーUI。 */
 public class RoomPanel extends JPanel {
@@ -37,10 +37,11 @@ public class RoomPanel extends JPanel {
     private final JList<String> memberList = new JList<>(memberListModel);
     private final JLabel currentRoomLabel = new JLabel("未入室");
     private final JLabel statusLabel = new JLabel("準備ができたら部屋を作成するか、一覧から参加してください");
+    private final JLabel readyStatusLabel = new JLabel("参加後、ゲーム開始を押すと準備完了になります");
 
     public RoomPanel() {
         setLayout(new BorderLayout(0, 18));
-        setBackground(UITheme.APP_BACKGROUND);
+        setBackground(UiTheme.APP_BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(24, 28, 18, 28));
         add(buildTopSection(), BorderLayout.NORTH);
         add(buildCenterPanel(), BorderLayout.CENTER);
@@ -69,12 +70,16 @@ public class RoomPanel extends JPanel {
     public void setCurrentRoom(String roomName) {
         boolean joined = roomName != null && !roomName.isEmpty();
         currentRoomLabel.setText(joined ? "●  " + roomName : "未入室");
-        currentRoomLabel.setForeground(joined ? UITheme.ACCENT : UITheme.TEXT_MUTED);
+        currentRoomLabel.setForeground(joined ? UiTheme.ACCENT : UiTheme.TEXT_MUTED);
         selectRoomByName(roomName);
     }
 
     public void showStatus(String message) {
         statusLabel.setText(message == null || message.isEmpty() ? " " : message);
+    }
+
+    public void setReadyStatus(String message) {
+        readyStatusLabel.setText(message == null || message.isEmpty() ? " " : message);
     }
 
     private JPanel buildTopSection() {
@@ -84,9 +89,9 @@ public class RoomPanel extends JPanel {
         JPanel heading = new JPanel(new BorderLayout(0, 4));
         heading.setOpaque(false);
         JLabel title = new JLabel("一緒に描くルームを選ぼう");
-        title.setFont(UITheme.TITLE.deriveFont(24f));
+        title.setFont(UiTheme.TITLE.deriveFont(24f));
         JLabel subtitle = new JLabel("名前を決めて、部屋を作るか参加するとゲームを始められます");
-        subtitle.setForeground(UITheme.TEXT_MUTED);
+        subtitle.setForeground(UiTheme.TEXT_MUTED);
         heading.add(title, BorderLayout.NORTH);
         heading.add(subtitle, BorderLayout.SOUTH);
         top.add(heading, BorderLayout.NORTH);
@@ -96,8 +101,8 @@ public class RoomPanel extends JPanel {
 
     private JPanel buildInputPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(UITheme.SURFACE);
-        panel.setBorder(UITheme.panelBorder(16, 18));
+        panel.setBackground(UiTheme.SURFACE);
+        panel.setBorder(UiTheme.panelBorder(16, 18));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.gridy = 0;
         constraints.insets = new Insets(0, 0, 0, 10);
@@ -129,9 +134,9 @@ public class RoomPanel extends JPanel {
         constraints.insets = new Insets(0, 0, 0, 10);
         panel.add(roomNameField, constraints);
 
-        JButton createButton = UITheme.primaryButton("部屋を作る");
+        JButton createButton = UiTheme.primaryButton("部屋を作る");
         createButton.addActionListener(e -> RoomController.createRoom(roomNameField.getText(), userNameField.getText()));
-        UITheme.setAccessibleText(createButton, "部屋を作る", "入力した名前で新しい部屋を作成");
+        UiTheme.setAccessibleText(createButton, "部屋を作る", "入力した名前で新しい部屋を作成");
         constraints.gridx = 4;
         constraints.weightx = 0;
         constraints.fill = GridBagConstraints.NONE;
@@ -162,9 +167,9 @@ public class RoomPanel extends JPanel {
 
         JPanel roomsPanel = sectionPanel("参加できる部屋", "ダブルクリックでも参加できます");
         roomsPanel.add(new JScrollPane(roomList), BorderLayout.CENTER);
-        JButton refreshButton = UITheme.secondaryButton("一覧を更新");
+        JButton refreshButton = UiTheme.secondaryButton("一覧を更新");
         refreshButton.addActionListener(e -> RoomController.requestRoomList());
-        JButton joinButton = UITheme.primaryButton("選んだ部屋に参加");
+        JButton joinButton = UiTheme.primaryButton("選んだ部屋に参加");
         joinButton.addActionListener(e -> joinSelectedRoom());
         JPanel roomActions = actionRow(refreshButton, joinButton);
         roomsPanel.add(roomActions, BorderLayout.SOUTH);
@@ -174,17 +179,24 @@ public class RoomPanel extends JPanel {
         roomState.setOpaque(false);
         roomState.setBorder(BorderFactory.createEmptyBorder(4, 4, 10, 4));
         JLabel stateLabel = new JLabel("ルーム");
-        stateLabel.setForeground(UITheme.TEXT_MUTED);
+        stateLabel.setForeground(UiTheme.TEXT_MUTED);
         currentRoomLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        currentRoomLabel.setFont(UITheme.LABEL);
-        currentRoomLabel.setForeground(UITheme.TEXT_MUTED);
+        currentRoomLabel.setFont(UiTheme.LABEL);
+        currentRoomLabel.setForeground(UiTheme.TEXT_MUTED);
         roomState.add(stateLabel, BorderLayout.WEST);
         roomState.add(currentRoomLabel, BorderLayout.CENTER);
         membersPanel.add(roomState, BorderLayout.NORTH);
         membersPanel.add(new JScrollPane(memberList), BorderLayout.CENTER);
-        JButton startButton = UITheme.primaryButton("ゲームを開始");
+        JButton startButton = UiTheme.primaryButton("ゲームを開始");
         startButton.addActionListener(e -> RoomController.startGame());
-        membersPanel.add(actionRow(startButton), BorderLayout.SOUTH);
+        JPanel startRow = new JPanel(new BorderLayout(10, 0));
+        startRow.setOpaque(false);
+        startRow.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
+        readyStatusLabel.setForeground(UiTheme.TEXT_MUTED);
+        readyStatusLabel.setFont(UiTheme.LABEL);
+        startRow.add(readyStatusLabel, BorderLayout.CENTER);
+        startRow.add(actionRow(startButton), BorderLayout.EAST);
+        membersPanel.add(startRow, BorderLayout.SOUTH);
 
         JPanel center = new JPanel(new GridLayout(1, 2, 16, 0));
         center.setOpaque(false);
@@ -195,14 +207,14 @@ public class RoomPanel extends JPanel {
 
     private JPanel sectionPanel(String titleText, String hintText) {
         JPanel panel = new JPanel(new BorderLayout(0, 12));
-        panel.setBackground(UITheme.SURFACE);
-        panel.setBorder(UITheme.panelBorder(16, 16));
+        panel.setBackground(UiTheme.SURFACE);
+        panel.setBorder(UiTheme.panelBorder(16, 16));
         JPanel heading = new JPanel(new BorderLayout(0, 3));
         heading.setOpaque(false);
         JLabel title = new JLabel(titleText);
-        title.setFont(UITheme.TITLE.deriveFont(17f));
+        title.setFont(UiTheme.TITLE.deriveFont(17f));
         JLabel hint = new JLabel(hintText);
-        hint.setForeground(UITheme.TEXT_MUTED);
+        hint.setForeground(UiTheme.TEXT_MUTED);
         heading.add(title, BorderLayout.NORTH);
         heading.add(hint, BorderLayout.SOUTH);
         panel.add(heading, BorderLayout.NORTH);
@@ -221,11 +233,11 @@ public class RoomPanel extends JPanel {
 
     private JPanel buildStatusPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(UITheme.SURFACE_MUTED);
+        panel.setBackground(UiTheme.SURFACE_MUTED);
         panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UITheme.BORDER),
+                BorderFactory.createLineBorder(UiTheme.BORDER),
                 BorderFactory.createEmptyBorder(10, 13, 10, 13)));
-        statusLabel.setForeground(UITheme.TEXT_MUTED);
+        statusLabel.setForeground(UiTheme.TEXT_MUTED);
         statusLabel.getAccessibleContext().setAccessibleName("現在の状態");
         panel.add(statusLabel, BorderLayout.CENTER);
         return panel;
@@ -233,15 +245,15 @@ public class RoomPanel extends JPanel {
 
     private JLabel fieldLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setFont(UITheme.LABEL);
+        label.setFont(UiTheme.LABEL);
         return label;
     }
 
     private void prepareTextField(JTextField field, String name, String description) {
         field.setMinimumSize(new Dimension(130, 40));
         field.setPreferredSize(new Dimension(180, 40));
-        field.setBorder(UITheme.compoundBorder(UITheme.BORDER, 8, 10));
-        UITheme.setAccessibleText(field, name, description);
+        field.setBorder(UiTheme.compoundBorder(UiTheme.BORDER, 8, 10));
+        UiTheme.setAccessibleText(field, name, description);
     }
 
     private void joinSelectedRoom() {
@@ -279,10 +291,10 @@ public class RoomPanel extends JPanel {
             RoomController.RoomInfo room = (RoomController.RoomInfo) value;
             JLabel label = (JLabel) super.getListCellRendererComponent(
                     list, room.getName() + "     " + room.getMemberCount() + "人", index, isSelected, cellHasFocus);
-            label.setFont(UITheme.BODY.deriveFont(Font.BOLD, 14f));
+            label.setFont(UiTheme.BODY.deriveFont(Font.BOLD, 14f));
             label.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
-            label.setBackground(isSelected ? UITheme.ACCENT_SOFT : UITheme.SURFACE);
-            label.setForeground(UITheme.TEXT);
+            label.setBackground(isSelected ? UiTheme.ACCENT_SOFT : UiTheme.SURFACE);
+            label.setForeground(UiTheme.TEXT);
             return label;
         }
     }
@@ -294,8 +306,8 @@ public class RoomPanel extends JPanel {
             JLabel label = (JLabel) super.getListCellRendererComponent(
                     list, "●  " + value, index, isSelected, cellHasFocus);
             label.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
-            label.setForeground(UITheme.TEXT);
-            label.setBackground(isSelected ? UITheme.ACCENT_SOFT : UITheme.SURFACE);
+            label.setForeground(UiTheme.TEXT);
+            label.setBackground(isSelected ? UiTheme.ACCENT_SOFT : UiTheme.SURFACE);
             return label;
         }
     }

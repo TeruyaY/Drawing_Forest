@@ -7,6 +7,8 @@ import java.util.concurrent.CopyOnWriteArraySet;
 
 import common.Protocol;
 import server.ClientHandler;
+import server.game.GameManager;
+import server.room.RoomManager;
 
 /**
  * 担当B（お絵描き）のサーバー側処理。
@@ -18,8 +20,7 @@ import server.ClientHandler;
  *   本来「誰がどの部屋にいるか」は担当A(RoomManager)の管轄です。
  *   そこで、Aが部屋への入退室を扱うときに呼べるように joinRoom()/leaveRoom() を
  *   公開APIとして用意しています（連携ポイント）。
- *   まだAが未連携でも単体テストできるよう、描画データを送ってきた本人は
- *   handleDrawData() 内で自動的にその部屋へ登録します。
+ *   描画データを送れるのは、RoomManagerを通して正式に入室したメンバーだけです。
  */
 public class DrawManager {
 
@@ -53,7 +54,7 @@ public class DrawManager {
 
     // ============================================================
     // ClientHandler から呼ばれる本体
-    //   data の形式: "部屋ID,X1,Y1,X2,Y2,色"   (例: "testroom,150,200,152,205,BLACK")
+    //   data の形式: "部屋ID,X1,Y1,X2,Y2,色,線幅"
     // ============================================================
     public static void handleDrawData(ClientHandler client, String data) {
         // 先頭の「部屋ID」と、それ以降の「座標+色」に分ける
@@ -62,11 +63,12 @@ public class DrawManager {
             System.out.println("[DrawManager] 不正な描画データを無視: " + data);
             return;
         }
-        String roomId  = parts[0];
-        String payload = parts[1]; // "X1,Y1,X2,Y2,色"
+        String roomId  = parts[0].trim();
+        String payload = parts[1];
 
-        // Aの連携がまだでも動くように、描いた本人を自動でその部屋に登録しておく
-        joinRoom(roomId, client);
+        if (!isAuthorizedDrawer(client, roomId) || !isValidPayload(payload)) {
+            return;
+        }
 
         Set<ClientHandler> members = roomMembers.get(roomId);
         if (members == null) {
@@ -84,23 +86,75 @@ public class DrawManager {
         }
     }
 
-    /** 同じ部屋の全員に、キャンバスを白紙に戻す通知を送る。 */
-    public static void handleClear(ClientHandler client, String data) {
-        String roomId = data == null ? "" : data.trim();
-        if (roomId.isEmpty()) {
-            System.out.println("[DrawManager] 部屋IDのない全消し要求を無視");
+    // ============================================================
+    // ClientHandler から呼ばれる本体（Clearボタン）
+    //   data の形式: "部屋ID"
+    // ============================================================
+    public static void handleClear(ClientHandler client, String roomId) {
+        String room = roomId == null ? "" : roomId.trim();
+        if (room.isEmpty()) {
             return;
         }
 
-        joinRoom(roomId, client);
-        Set<ClientHandler> members = roomMembers.get(roomId);
+        if (!isAuthorizedDrawer(client, room)) {
+            return;
+        }
+
+        Set<ClientHandler> members = roomMembers.get(room);
         if (members == null) {
             return;
         }
 
         String message = Protocol.DRAW_CLEAR_RECEIVED + ":";
         for (ClientHandler member : members) {
-            member.sendMessage(message);
+            if (member != client) {
+                member.sendMessage(message);
+            }
+        }
+    }
+
+    private static boolean isAuthorizedDrawer(ClientHandler client, String roomId) {
+        return roomId != null
+                && roomId.equals(RoomManager.getRoomOf(client))
+                && GameManager.canDraw(client, roomId);
+    }
+
+    private static boolean isValidPayload(String payload) {
+        String[] values = payload == null ? new String[0] : payload.split(",", -1);
+        if (values.length != 5 && values.length != 6) {
+            return false;
+        }
+        try {
+            Integer.parseInt(values[0].trim());
+            Integer.parseInt(values[1].trim());
+            Integer.parseInt(values[2].trim());
+            Integer.parseInt(values[3].trim());
+        } catch (NumberFormatException e) {
+            return false;
+        }
+
+        if (values.length == 6) {
+            try {
+                float width = Float.parseFloat(values[5].trim());
+                if (width < 2.0f || width > 24.0f) {
+                    return false;
+                }
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+
+        switch (values[4].trim().toUpperCase()) {
+            case "BLACK":
+            case "RED":
+            case "BLUE":
+            case "GREEN":
+            case "YELLOW":
+            case "PURPLE":
+            case "WHITE":
+                return true;
+            default:
+                return false;
         }
     }
 }

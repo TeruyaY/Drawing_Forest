@@ -1,8 +1,11 @@
 package client.game;
 
+import java.util.function.Consumer;
+
 import javax.swing.SwingUtilities;
 
 import client.GameClient;
+import client.draw.DrawController;
 import client.room.RoomController;
 import common.Protocol;
 
@@ -10,6 +13,8 @@ public class GameController {
     private static GameClient client;
     private static ChatPanel chatPanel;
     private static GamePanel gamePanel;
+    private static Consumer<String> gameEndListener;
+    private static Runnable roundStartedListener;
 
     public static void init(GameClient gameClient, ChatPanel panel) {
         init(gameClient, panel, null);
@@ -19,6 +24,16 @@ public class GameController {
         client = gameClient;
         chatPanel = panel;
         gamePanel = panelContainer;
+    }
+
+    // ゲーム終了(GAME_END)を受けたときに呼ばれる画面遷移用フック。最終スコア文字列を受け取る。
+    public static void setGameEndListener(Consumer<String> listener) {
+        gameEndListener = listener;
+    }
+
+    // ラウンド開始(GAME_ROUND_START)を受けたときに呼ばれる画面遷移用フック
+    public static void setRoundStartedListener(Runnable listener) {
+        roundStartedListener = listener;
     }
 
     public static void startGame() {
@@ -82,6 +97,10 @@ public class GameController {
     }
 
     private static void handleRoundStart(String data) {
+        if (roundStartedListener != null) {
+            roundStartedListener.run();
+        }
+
         String[] parts = data == null ? new String[0] : data.split(",", -1);
         String round = parts.length > 1 ? parts[1] : "?";
         String total = parts.length > 2 ? parts[2] : "?";
@@ -89,6 +108,9 @@ public class GameController {
         String role = parts.length > 4 ? parts[4] : "";
         String theme = parts.length > 5 ? parts[5] : "";
         int seconds = parts.length > 6 ? parseInt(parts[6], 60) : 60;
+
+        DrawController.setDrawingEnabled("DRAWER".equals(role));
+        DrawController.clearForNewRound();
 
         if (chatPanel != null) {
             chatPanel.clearChat();
@@ -138,7 +160,9 @@ public class GameController {
         addChat("Game finished. Final scores: " + data);
         if (gamePanel != null) {
             gamePanel.setScores(data);
-            gamePanel.showFinalScores(data);
+        }
+        if (gameEndListener != null) {
+            gameEndListener.accept(data);
         }
     }
 

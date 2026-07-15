@@ -83,4 +83,29 @@ public class DrawManager {
             }
         }
     }
+
+    // ============================================================
+    // ClientHandler から呼ばれる本体（Clearボタン）
+    //   data の形式: "部屋ID"
+    // ============================================================
+    public static void handleClear(ClientHandler client, String roomId) {
+        String room = roomId == null ? "" : roomId.trim();
+        if (room.isEmpty()) {
+            return;
+        }
+
+        joinRoom(room, client);
+
+        Set<ClientHandler> members = roomMembers.get(room);
+        if (members == null) {
+            return;
+        }
+
+        String message = Protocol.DRAW_CLEAR_RECEIVED + ":";
+        for (ClientHandler member : members) {
+            if (member != client) {
+                member.sendMessage(message);
+            }
+        }
+    }
 }

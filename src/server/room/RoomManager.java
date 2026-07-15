@@ -153,7 +153,7 @@ public class RoomManager {
     }
 
     private static String moveClientToRoomLocked(ClientHandler client, Room room, String userName) {
-        client.setUserName(userName);
+        client.setUserName(ensureUniqueName(room, client, userName));
 
         String oldRoomName = clientRooms.get(client);
 
@@ -178,6 +178,33 @@ public class RoomManager {
         DrawManager.joinRoom(room.name, client);
 
         return oldRoomName;
+    }
+
+    // GameManagerはユーザー名の文字列でプレイヤーを識別するため、
+    // 同じ部屋内で名前が重複すると別人として区別できなくなる。
+    // ここで重複を検知し、自動的に連番を付けて一意にする。
+    private static String ensureUniqueName(Room room, ClientHandler client, String baseName) {
+        if (!isNameTakenByOthers(room, client, baseName)) {
+            return baseName;
+        }
+
+        int suffix = 2;
+        String candidate;
+        do {
+            candidate = baseName + suffix;
+            suffix++;
+        } while (isNameTakenByOthers(room, client, candidate));
+
+        return candidate;
+    }
+
+    private static boolean isNameTakenByOthers(Room room, ClientHandler client, String name) {
+        for (ClientHandler member : room.members) {
+            if (member != client && name.equals(member.getUserName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static RoomRequest parseRoomRequest(String data) {

@@ -1,8 +1,10 @@
 package client.room;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -21,6 +23,9 @@ import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.border.TitledBorder;
+
+import client.UiTheme;
 
 public class RoomPanel extends JPanel {
     private final JTextField userNameField = new JTextField("Player", 14);
@@ -31,10 +36,12 @@ public class RoomPanel extends JPanel {
     private final JList<String> memberList = new JList<>(memberListModel);
     private final JLabel currentRoomLabel = new JLabel("未入室");
     private final JLabel statusLabel = new JLabel(" ");
+    private final JLabel readyStatusLabel = new JLabel(" ");
 
     public RoomPanel() {
         setLayout(new BorderLayout(8, 8));
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        setBackground(UiTheme.BACKGROUND);
         add(buildInputPanel(), BorderLayout.NORTH);
         add(buildCenterPanel(), BorderLayout.CENTER);
         add(buildStatusPanel(), BorderLayout.SOUTH);
@@ -65,8 +72,13 @@ public class RoomPanel extends JPanel {
         statusLabel.setText(message == null || message.isEmpty() ? " " : message);
     }
 
+    public void setReadyStatus(String message) {
+        readyStatusLabel.setText(message == null || message.isEmpty() ? " " : message);
+    }
+
     private JPanel buildInputPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBackground(UiTheme.BACKGROUND);
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(0, 0, 6, 8);
         c.anchor = GridBagConstraints.WEST;
@@ -85,7 +97,7 @@ public class RoomPanel extends JPanel {
         c.gridx = 1;
         panel.add(roomNameField, c);
 
-        JButton createButton = new JButton("作成");
+        JButton createButton = styledButton("作成", UiTheme.PRIMARY);
         createButton.addActionListener(e -> RoomController.createRoom(roomNameField.getText(), userNameField.getText()));
         c.gridx = 2;
         panel.add(createButton, c);
@@ -96,6 +108,16 @@ public class RoomPanel extends JPanel {
         panel.add(refreshButton, c);
 
         return panel;
+    }
+
+    private JButton styledButton(String text, Color background) {
+        JButton button = new JButton(text);
+        button.setBackground(background);
+        button.setForeground(Color.WHITE);
+        button.setOpaque(true);
+        button.setBorderPainted(false);
+        button.setFont(button.getFont().deriveFont(Font.BOLD));
+        return button;
     }
 
     private JSplitPane buildCenterPanel() {
@@ -110,27 +132,25 @@ public class RoomPanel extends JPanel {
         });
 
         JPanel roomsPanel = new JPanel(new BorderLayout(6, 6));
-        roomsPanel.setBorder(BorderFactory.createTitledBorder("部屋一覧"));
+        roomsPanel.setBackground(UiTheme.BACKGROUND);
+        roomsPanel.setBorder(titledBorder("部屋一覧"));
         JScrollPane roomScroll = new JScrollPane(roomList);
-        roomScroll.setPreferredSize(new Dimension(260, 260));
+        roomScroll.setPreferredSize(new Dimension(380, 420));
         roomsPanel.add(roomScroll, BorderLayout.CENTER);
 
-        JButton joinButton = new JButton("参加");
+        JButton joinButton = styledButton("参加", UiTheme.GUESSER);
         joinButton.addActionListener(e -> joinSelectedRoom());
         JPanel roomButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        roomButtons.setBackground(UiTheme.BACKGROUND);
         roomButtons.add(joinButton);
         roomsPanel.add(roomButtons, BorderLayout.SOUTH);
 
         JPanel membersPanel = new JPanel(new BorderLayout(6, 6));
-        membersPanel.setBorder(BorderFactory.createTitledBorder("待機中メンバー"));
+        membersPanel.setBackground(UiTheme.BACKGROUND);
+        membersPanel.setBorder(titledBorder("待機中メンバー"));
         membersPanel.add(buildCurrentRoomPanel(), BorderLayout.NORTH);
         membersPanel.add(new JScrollPane(memberList), BorderLayout.CENTER);
-
-        JButton startButton = new JButton("ゲーム開始");
-        startButton.addActionListener(e -> RoomController.startGame());
-        JPanel startPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        startPanel.add(startButton);
-        membersPanel.add(startPanel, BorderLayout.SOUTH);
+        membersPanel.add(buildStartGamePanel(), BorderLayout.SOUTH);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, roomsPanel, membersPanel);
         splitPane.setResizeWeight(0.45);
@@ -138,17 +158,42 @@ public class RoomPanel extends JPanel {
         return splitPane;
     }
 
+    private TitledBorder titledBorder(String title) {
+        TitledBorder border = BorderFactory.createTitledBorder(title);
+        border.setTitleFont(border.getTitleFont().deriveFont(Font.BOLD));
+        border.setTitleColor(UiTheme.PRIMARY_DARK);
+        return border;
+    }
+
+    private JPanel buildStartGamePanel() {
+        JPanel panel = new JPanel(new BorderLayout(6, 0));
+        panel.setBackground(UiTheme.BACKGROUND);
+        readyStatusLabel.setHorizontalAlignment(SwingConstants.LEFT);
+        readyStatusLabel.setFont(readyStatusLabel.getFont().deriveFont(Font.BOLD));
+        panel.add(readyStatusLabel, BorderLayout.CENTER);
+
+        JButton startButton = styledButton("ゲーム開始", UiTheme.DRAWER);
+        startButton.addActionListener(e -> RoomController.startGame());
+        panel.add(startButton, BorderLayout.EAST);
+        return panel;
+    }
+
     private JPanel buildCurrentRoomPanel() {
         JPanel panel = new JPanel(new BorderLayout(6, 0));
+        panel.setBackground(UiTheme.BACKGROUND);
         panel.add(new JLabel("現在の部屋"), BorderLayout.WEST);
         currentRoomLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        currentRoomLabel.setForeground(UiTheme.PRIMARY_DARK);
+        currentRoomLabel.setFont(currentRoomLabel.getFont().deriveFont(Font.BOLD));
         panel.add(currentRoomLabel, BorderLayout.CENTER);
         return panel;
     }
 
     private JPanel buildStatusPanel() {
         JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(UiTheme.BACKGROUND);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+        statusLabel.setForeground(UiTheme.PRIMARY_DARK);
         panel.add(statusLabel, BorderLayout.CENTER);
         return panel;
     }

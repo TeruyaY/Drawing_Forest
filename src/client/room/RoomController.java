@@ -14,10 +14,16 @@ public class RoomController {
     private static RoomPanel panel;
     private static String currentRoom;
     private static String userName = "Player";
+    private static Runnable roomJoinedListener;
 
     public static void init(GameClient gameClient, RoomPanel roomPanel) {
         client = gameClient;
         panel = roomPanel;
+    }
+
+    // 部屋への参加(作成含む)が成功したときに呼ばれる画面遷移用フック
+    public static void setRoomJoinedListener(Runnable listener) {
+        roomJoinedListener = listener;
     }
 
     public static void createRoom(String roomName, String requestedUserName) {
@@ -98,6 +104,9 @@ public class RoomController {
             case Protocol.ROOM_ERROR:
                 showStatus(data);
                 break;
+            case Protocol.GAME_READY_UPDATE:
+                handleReadyUpdate(data);
+                break;
             default:
                 System.out.println("[RoomController] 未対応のコマンド: " + command + ":" + data);
         }
@@ -132,6 +141,21 @@ public class RoomController {
             if (panel != null) {
                 panel.setCurrentRoom(room);
                 panel.showStatus(statusPrefix + ": " + room);
+            }
+            if (roomJoinedListener != null) {
+                roomJoinedListener.run();
+            }
+        });
+    }
+
+    private static void handleReadyUpdate(String data) {
+        String[] parts = data == null ? new String[0] : data.split(",", 3);
+        String readyCount = parts.length > 0 ? clean(parts[0]) : "0";
+        String total = parts.length > 1 ? clean(parts[1]) : "0";
+
+        runOnUi(() -> {
+            if (panel != null) {
+                panel.setReadyStatus("準備完了: " + readyCount + " / " + total);
             }
         });
     }

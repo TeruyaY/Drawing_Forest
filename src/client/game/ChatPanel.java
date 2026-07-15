@@ -1,7 +1,9 @@
 package client.game;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
 
 import javax.swing.BorderFactory;
@@ -12,6 +14,9 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.border.TitledBorder;
+
+import client.UiTheme;
 
 public class ChatPanel extends JPanel {
     private final DefaultListModel<String> chatModel = new DefaultListModel<>();
@@ -25,9 +30,18 @@ public class ChatPanel extends JPanel {
 
     public ChatPanel() {
         setLayout(new BorderLayout(6, 6));
-        setBorder(BorderFactory.createTitledBorder("Chat"));
+        setBackground(UiTheme.BACKGROUND);
+        TitledBorder border = BorderFactory.createTitledBorder("Chat");
+        border.setTitleFont(border.getTitleFont().deriveFont(Font.BOLD));
+        border.setTitleColor(UiTheme.PRIMARY_DARK);
+        setBorder(border);
+
+        roleLabel.setFont(roleLabel.getFont().deriveFont(Font.BOLD));
+        themeLabel.setFont(themeLabel.getFont().deriveFont(Font.BOLD));
+        timerLabel.setFont(timerLabel.getFont().deriveFont(Font.BOLD, 15f));
 
         JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        statusPanel.setBackground(UiTheme.BACKGROUND);
         statusPanel.add(roleLabel);
         statusPanel.add(themeLabel);
         statusPanel.add(timerLabel);
@@ -35,9 +49,16 @@ public class ChatPanel extends JPanel {
 
         add(new JScrollPane(chatList), BorderLayout.CENTER);
 
+        sendButton.setBackground(UiTheme.PRIMARY);
+        sendButton.setForeground(Color.WHITE);
+        sendButton.setOpaque(true);
+        sendButton.setBorderPainted(false);
+
         JPanel inputPanel = new JPanel(new BorderLayout(6, 0));
+        inputPanel.setBackground(UiTheme.BACKGROUND);
         inputPanel.add(inputField, BorderLayout.CENTER);
         inputPanel.add(sendButton, BorderLayout.EAST);
+        resultLabel.setFont(resultLabel.getFont().deriveFont(Font.BOLD));
         inputPanel.add(resultLabel, BorderLayout.SOUTH);
         add(inputPanel, BorderLayout.SOUTH);
 
@@ -57,15 +78,32 @@ public class ChatPanel extends JPanel {
 
     public void setRoundInfo(String role, String drawerName, String theme) {
         roleLabel.setText("Role: " + role + " / Drawer: " + drawerName);
-        themeLabel.setText(theme == null || theme.isEmpty() ? "Theme: -" : "Theme: " + theme);
+        roleLabel.setForeground("DRAWER".equals(role) ? UiTheme.DRAWER : UiTheme.GUESSER);
+        themeLabel.setText(theme == null || theme.isEmpty() ? "Theme: (guessers can't see this)" : "Theme: " + theme);
     }
 
     public void setTimeRemaining(int seconds) {
         timerLabel.setText("Time: " + seconds);
+        timerLabel.setForeground(seconds <= 10 ? UiTheme.DANGER : UiTheme.PRIMARY_DARK);
     }
 
     public void showResult(String message) {
         resultLabel.setText(message == null || message.isEmpty() ? " " : message);
+        resultLabel.setForeground(resultColor(message));
+    }
+
+    private Color resultColor(String message) {
+        if (message == null) {
+            return Color.DARK_GRAY;
+        }
+        if (message.startsWith("Correct")) {
+            return UiTheme.SUCCESS;
+        }
+        if (message.startsWith("Wrong") || message.startsWith("Error") || message.contains("required")
+                || message.contains("least")) {
+            return UiTheme.DANGER;
+        }
+        return Color.DARK_GRAY;
     }
 
     private void send(ActionEvent event) {

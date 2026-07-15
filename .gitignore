@@ -1,0 +1,20 @@
+# ビルド生成物
+out/
+bin/
+build/
+*.class
+
+# ローカル作業メモ（チーム共有はREADME.mdに集約する）
+CHANGES.md
+
+# エディタ・IDEの設定ファイル
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# OSの一時ファイル
+.DS_Store
+Thumbs.db

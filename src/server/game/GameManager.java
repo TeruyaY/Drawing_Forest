@@ -21,6 +21,7 @@ public class GameManager {
     private static final int MAX_CHAT_LENGTH = 120;
     private static final Object LOCK = new Object();
     private static final Map<String, RoomGame> games = new HashMap<>();
+    private static final Map<String, Set<String>> readySets = new HashMap<>();
     private static final Random RANDOM = new Random();
     private static final String[] THEMES = {
         "apple", "dog", "car", "tree", "house", "book", "soccer", "piano",
@@ -35,21 +36,44 @@ public class GameManager {
         }
 
         synchronized (LOCK) {
+            if (games.containsKey(roomName)) {
+                // 既にラウンドが進行中なら準備状態の変更は不要
+                return;
+            }
+
             List<ClientHandler> members = liveMembers(roomName);
             if (members.size() < 2) {
                 client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":ERROR,need at least 2 players");
                 return;
             }
 
-            RoomGame oldGame = games.remove(roomName);
-            if (oldGame != null) {
-                oldGame.cancelTimer();
+            Set<String> liveNames = new HashSet<>();
+            for (ClientHandler member : members) {
+                liveNames.add(member.getUserName());
             }
 
+            Set<String> ready = readySets.computeIfAbsent(roomName, key -> new HashSet<>());
+            ready.add(client.getUserName());
+            ready.retainAll(liveNames);
+            broadcastReady(roomName, ready, liveNames.size());
+
+            if (!ready.containsAll(liveNames)) {
+                // 部屋にいる全員が「ゲーム開始」を押すまで開始しない
+                return;
+            }
+
+            readySets.remove(roomName);
             RoomGame game = new RoomGame(roomName, members);
             games.put(roomName, game);
             startRoundLocked(game);
         }
+    }
+
+    private static void broadcastReady(String roomName, Set<String> ready, int total) {
+        List<String> names = new ArrayList<>(ready);
+        Collections.sort(names);
+        RoomManager.broadcastToRoom(roomName,
+                Protocol.GAME_READY_UPDATE + ":" + ready.size() + "," + total + "," + String.join("|", names));
     }
 
     public static void handleChatSubmit(ClientHandler client, String data) {
@@ -94,6 +118,7 @@ public class GameManager {
                 game.correctUsers.add(client.getUserName());
                 game.correctCount++;
                 game.addScore(client.getUserName(), points);
+                game.roundPointsAwarded += points;
                 boolean roundComplete = allGuessersCorrect(game);
 
                 client.sendMessage(Protocol.GAME_JUDGE_RESULT + ":CORRECT," + points);
@@ -117,6 +142,11 @@ public class GameManager {
 
     public static void removeClient(ClientHandler client) {
         synchronized (LOCK) {
+            String userName = client.getUserName();
+            for (Set<String> ready : readySets.values()) {
+                ready.remove(userName);
+            }
+
             for (Iterator<Map.Entry<String, RoomGame>> it = games.entrySet().iterator(); it.hasNext();) {
                 Map.Entry<String, RoomGame> entry = it.next();
                 RoomGame game = entry.getValue();
@@ -157,6 +187,7 @@ public class GameManager {
         game.currentTheme = randomTheme();
         game.correctUsers.clear();
         game.correctCount = 0;
+        game.roundPointsAwarded = 0;
         game.guesserCount = Math.max(0, game.activePlayers.size() - 1);
         game.roundStartMillis = System.currentTimeMillis();
         game.roundActive = true;
@@ -208,8 +239,11 @@ public class GameManager {
         }
 
         game.roundActive = false;
+        // 描いた人にも、そのお題で回答者たちが稼いだ得点の平均を加点する
+        awardDrawerBonusLocked(game);
         RoomManager.broadcastToRoom(game.roomName,
                 Protocol.GAME_ROUND_END + ":" + reason + "," + game.currentTheme.getDisplayName());
+        broadcastScores(game);
 
         if (game.drawerIndex >= game.drawingOrder.size()) {
             finishGameLocked(game);
@@ -230,6 +264,18 @@ public class GameManager {
                 }
             }
         }, 3000);
+    }
+
+    /** 描いた人に、その回で回答者たちが稼いだ得点の平均を加点する。 */
+    private static void awardDrawerBonusLocked(RoomGame game) {
+        if (game.drawerName == null || game.correctUsers.isEmpty()) {
+            return;
+        }
+
+        int bonus = game.roundPointsAwarded / game.correctUsers.size();
+        if (bonus > 0) {
+            game.addScore(game.drawerName, bonus);
+        }
     }
 
     private static void finishRoundAsync(String roomName, RoomGame expectedGame, String reason) {
@@ -347,6 +393,7 @@ public class GameManager {
         private boolean roundActive;
         private int guesserCount;
         private int correctCount;
+        private int roundPointsAwarded;
         private Timer timer;
 
         private RoomGame(String roomName, List<ClientHandler> members) {

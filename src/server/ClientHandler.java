@@ -71,6 +71,9 @@ public class ClientHandler implements Runnable {
                     case Protocol.DRAW_DATA:
                         DrawManager.handleDrawData(this, data);
                         break;
+                    case Protocol.DRAW_CLEAR:
+                        DrawManager.handleClear(this, data);
+                        break;
 
                     // ==========================================
                     // Cさんの領域 (回答・判定・進行)

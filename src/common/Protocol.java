@@ -14,6 +14,8 @@ public class Protocol {
     // B: お絵描き関連コマンド
     public static final String DRAW_DATA   = "DRAW_DATA";         // 引数: 部屋ID, X1,Y1,X2,Y2,色
     public static final String DRAW_RECEIVED = "DRAW_RCV";        // サーバーからの他プレイヤーへの転送
+    public static final String DRAW_CLEAR  = "DRAW_CLEAR";        // 引数: 部屋ID（Clearボタンが押された通知）
+    public static final String DRAW_CLEAR_RECEIVED = "DRAW_CLR";  // サーバーから: 他プレイヤーがClearを押した通知
     
    // C: ゲーム進行・判定関連コマンド
 public static final String GAME_START  = "GAME_START";        // 引数: 部屋ID
@@ -25,4 +27,5 @@ public static final String GAME_ROUND_END = "G_R_END";        // サーバーか
 public static final String CHAT_BROADCAST = "CHAT_BROADCAST"; // サーバーから: ユーザー名,発言内容
 public static final String GAME_TIME_UPDATE = "G_TIME";       // サーバーから: 残り秒数
 public static final String GAME_END = "GAME_END";             // サーバーから: 最終スコアデータ一覧
+public static final String GAME_READY_UPDATE = "GAME_READY";  // サーバーから: 準備完了人数,合計人数,準備完了ユーザー名|...
 }

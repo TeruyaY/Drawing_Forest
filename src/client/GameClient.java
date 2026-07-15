@@ -56,12 +56,16 @@ public class GameClient {
                         case Protocol.ROOM_LIST:
                         case Protocol.ROOM_MEMBERS:
                         case Protocol.ROOM_ERROR:
+                        case Protocol.GAME_READY_UPDATE:
                             RoomController.onRoomMessage(command, data);
                             break;
 
                         // B：お絵描き関連
                         case Protocol.DRAW_RECEIVED:
                             DrawController.onDrawReceived(data);
+                            break;
+                        case Protocol.DRAW_CLEAR_RECEIVED:
+                            DrawController.onClearReceived();
                             break;
 
                         // C：ゲーム進行・チャット関連

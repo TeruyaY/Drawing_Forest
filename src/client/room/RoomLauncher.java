@@ -2,23 +2,21 @@ package client.room;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
-import javax.swing.JToolBar;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 import client.GameClient;
 import client.UiTheme;
 import client.draw.DrawController;
+import client.draw.DrawLauncher;
 import client.draw.DrawPanel;
 import client.game.ChatPanel;
 import client.game.GameController;
@@ -30,7 +28,7 @@ public class RoomLauncher {
     private static final String CARD_PLAY = "PLAY";
     private static final String CARD_RESULT = "RESULT";
     // チャット欄が狭くなりすぎないよう、描画側にウェイトを寄せすぎない比率にしている
-    private static final double PLAY_SPLIT_RATIO = 0.55;
+    private static final double PLAY_SPLIT_RATIO = 0.66;
 
     public static void main(String[] args) {
         UiTheme.installGlobalDefaults();
@@ -100,7 +98,7 @@ public class RoomLauncher {
         frame.setLayout(new BorderLayout());
         frame.add(buildTitleBar(), BorderLayout.NORTH);
         frame.add(cards, BorderLayout.CENTER);
-        frame.getContentPane().setBackground(UiTheme.BACKGROUND);
+        frame.getContentPane().setBackground(UiTheme.APP_BACKGROUND);
         frame.setSize(1400, 900);
         frame.setMinimumSize(new Dimension(1100, 700));
         frame.setLocationRelativeTo(null);
@@ -116,19 +114,25 @@ public class RoomLauncher {
 
     private static JPanel buildTitleBar() {
         JLabel title = new JLabel("お絵描きの森", SwingConstants.LEFT);
-        title.setFont(UiTheme.TITLE_FONT);
-        title.setForeground(Color.WHITE);
-        title.setBorder(BorderFactory.createEmptyBorder(10, 18, 10, 18));
+        title.setFont(UiTheme.TITLE);
+        title.setForeground(UiTheme.TEXT);
+        title.setBorder(BorderFactory.createEmptyBorder(14, 20, 14, 20));
+
+        JLabel step = new JLabel("ロビー → お絵描き → 結果");
+        step.setForeground(UiTheme.TEXT_MUTED);
+        step.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 20));
 
         JPanel bar = new JPanel(new BorderLayout());
-        bar.setBackground(UiTheme.PRIMARY);
+        bar.setBackground(UiTheme.SURFACE);
+        bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
         bar.add(title, BorderLayout.WEST);
+        bar.add(step, BorderLayout.EAST);
         return bar;
     }
 
     private static JPanel buildPlayPanel(JSplitPane splitPane, JLabel currentRoomLabel) {
         JPanel playPanel = new JPanel(new BorderLayout(8, 8));
-        playPanel.setBackground(UiTheme.BACKGROUND);
+        playPanel.setBackground(UiTheme.APP_BACKGROUND);
         playPanel.add(buildPlayHeader(currentRoomLabel), BorderLayout.NORTH);
         playPanel.add(splitPane, BorderLayout.CENTER);
         return playPanel;
@@ -136,53 +140,22 @@ public class RoomLauncher {
 
     private static JPanel buildPlayHeader(JLabel currentRoomLabel) {
         currentRoomLabel.setFont(UiTheme.HEADING_FONT);
-        currentRoomLabel.setForeground(UiTheme.PRIMARY_DARK);
+        currentRoomLabel.setForeground(UiTheme.ACCENT);
 
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
-        header.setBackground(UiTheme.BACKGROUND);
+        header.setBackground(UiTheme.SURFACE);
+        header.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
         header.add(currentRoomLabel);
         return header;
     }
 
     private static JPanel buildDrawPanel(DrawPanel drawPanel) {
         JPanel panel = new JPanel(new BorderLayout());
-        panel.add(buildDrawToolBar(drawPanel), BorderLayout.NORTH);
+        panel.setBackground(UiTheme.APP_BACKGROUND);
+        panel.add(DrawLauncher.buildToolDock(drawPanel), BorderLayout.WEST);
         panel.add(drawPanel, BorderLayout.CENTER);
+        DrawLauncher.installShortcuts(panel, drawPanel);
         return panel;
-    }
-
-    private static JToolBar buildDrawToolBar(DrawPanel drawPanel) {
-        JToolBar toolBar = new JToolBar();
-        toolBar.setFloatable(false);
-        toolBar.setBackground(UiTheme.PRIMARY_LIGHT);
-
-        addColorButton(toolBar, drawPanel, "Black", "BLACK", Color.BLACK, Color.WHITE);
-        addColorButton(toolBar, drawPanel, "Red", "RED", Color.RED, Color.WHITE);
-        addColorButton(toolBar, drawPanel, "Blue", "BLUE", Color.BLUE, Color.WHITE);
-        addColorButton(toolBar, drawPanel, "Green", "GREEN", new Color(0, 150, 0), Color.WHITE);
-        addColorButton(toolBar, drawPanel, "Yellow", "YELLOW", new Color(230, 200, 0), Color.BLACK);
-        addColorButton(toolBar, drawPanel, "Eraser", "WHITE", Color.WHITE, Color.BLACK);
-
-        JButton clearButton = new JButton("Clear");
-        clearButton.setBackground(UiTheme.DANGER);
-        clearButton.setForeground(Color.WHITE);
-        clearButton.setOpaque(true);
-        clearButton.setBorderPainted(false);
-        clearButton.addActionListener(e -> DrawController.requestClear());
-        toolBar.add(clearButton);
-
-        return toolBar;
-    }
-
-    private static void addColorButton(JToolBar toolBar, DrawPanel drawPanel, String label, String colorName,
-            Color swatch, Color textColor) {
-        JButton button = new JButton(label);
-        button.setBackground(swatch);
-        button.setForeground(textColor);
-        button.setOpaque(true);
-        button.setBorderPainted(false);
-        button.addActionListener(e -> drawPanel.setColorName(colorName));
-        toolBar.add(button);
     }
 
     private static int parsePort(String s) {

@@ -53,24 +53,33 @@ public final class ClientDispatchTest {
             server.send("GAME_READY:1,2,アリス");
             server.send("G_R_START:日本語部屋,1,2,アリス,DRAWER,dog,60");
 
-            waitFor(() -> "Time: 60".equals(label(gamePanel, "timerLabel").getText()), 2_000);
+            waitFor(() -> "残り  60秒".equals(label(gamePanel, "timerLabel").getText()), 2_000);
             SwingUtilities.invokeAndWait(() -> { });
-            assertEquals("Theme: dog", label(gamePanel, "themeLabel").getText(), "開始直後のゲームTheme");
-            assertEquals("Time: 60", label(gamePanel, "timerLabel").getText(), "開始直後のゲームTime");
-            assertEquals("Theme: dog", label(chatPanel, "themeLabel").getText(), "開始直後のチャットTheme");
-            assertEquals("Time: 60", label(chatPanel, "timerLabel").getText(), "開始直後のチャットTime");
+            assertEquals("お題  dog", label(gamePanel, "themeLabel").getText(), "開始直後のゲームTheme");
+            assertEquals("残り  60秒", label(gamePanel, "timerLabel").getText(), "開始直後のゲームTime");
+            assertEquals("お題: dog", label(chatPanel, "themeLabel").getText(), "開始直後のチャットTheme");
+            assertEquals("残り時間  60秒", label(chatPanel, "timerLabel").getText(), "開始直後のチャットTime");
             assertTrue(drawPanel.isDrawingEnabled(), "Drawerの描画権限");
+
+            server.send("G_R_END:time_up,dog");
+            Thread.sleep(200);
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals("描く人", label(gamePanel, "roleLabel").getText(),
+                    "全員共通の待機時間中はラウンド表示を維持");
+            waitFor(() -> "ラウンド終了".equals(label(gamePanel, "roleLabel").getText()), 2_000);
+            assertEquals("次のラウンドを準備中", label(gamePanel, "timerLabel").getText(),
+                    "全員共通のラウンド遷移表示");
 
             // 次ラウンドでGuesserへ切り替わった直後の表示も確認する。
             server.send("G_R_START:日本語部屋,2,2,ボブ,GUESSER,,60");
-            waitFor(() -> "Role: GUESSER".equals(label(gamePanel, "roleLabel").getText()), 2_000);
+            waitFor(() -> "回答者".equals(label(gamePanel, "roleLabel").getText()), 2_000);
             SwingUtilities.invokeAndWait(() -> { });
-            assertEquals("Theme: (guessers can't see this)", label(gamePanel, "themeLabel").getText(),
+            assertEquals("お題  秘密", label(gamePanel, "themeLabel").getText(),
                     "役割切替後のゲームTheme");
-            assertEquals("Time: 60", label(gamePanel, "timerLabel").getText(), "役割切替後のゲームTime");
-            assertEquals("Theme: (guessers can't see this)", label(chatPanel, "themeLabel").getText(),
+            assertEquals("残り  60秒", label(gamePanel, "timerLabel").getText(), "役割切替後のゲームTime");
+            assertEquals("お題は正解するまで秘密です", label(chatPanel, "themeLabel").getText(),
                     "役割切替後のチャットTheme");
-            assertEquals("Time: 60", label(chatPanel, "timerLabel").getText(), "役割切替後のチャットTime");
+            assertEquals("残り時間  60秒", label(chatPanel, "timerLabel").getText(), "役割切替後のチャットTime");
             assertTrue(!drawPanel.isDrawingEnabled(), "Guesserの描画禁止");
 
             server.send("G_SCORE:アリス=500;ボブ=0");
@@ -81,16 +90,25 @@ public final class ClientDispatchTest {
             server.send("GAME_END:アリス=500;ボブ=0");
 
             waitFor(() -> "日本語部屋".equals(RoomController.getCurrentRoom()), 2_000);
-            waitFor(() -> "アリス=500;ボブ=0".equals(finalScores.get()), 2_000);
+            Thread.sleep(200);
+            SwingUtilities.invokeAndWait(() -> { });
+            assertTrue(finalScores.get() == null, "正解演出中は結果画面へ遷移しない");
+            waitFor(() -> "アリス=500;ボブ=0".equals(finalScores.get()), 2_500);
             SwingUtilities.invokeAndWait(() -> { });
 
             assertEquals("日本語部屋", DrawController.getRoomId(), "描画ルームID");
             assertEquals(2, model(roomPanel, "memberListModel").getSize(), "メンバー数");
             assertEquals("準備完了: 0 / 2", label(roomPanel, "readyStatusLabel").getText(),
                     "ゲーム終了後の準備表示");
-            assertEquals("Time: 42", label(gamePanel, "timerLabel").getText(), "タイマー表示");
-            assertTrue(area(gamePanel, "scoreArea").getText().contains("アリス: 500"), "スコア表示");
-            assertEquals("Correct! +500", label(chatPanel, "resultLabel").getText(), "正解表示");
+            assertEquals("残り  42秒", label(gamePanel, "timerLabel").getText(), "タイマー表示");
+            assertTrue(area(gamePanel, "scoreArea").getText().contains("アリス  500点"), "スコア表示");
+            assertEquals("正解！ +500", label(chatPanel, "resultLabel").getText(), "正解表示");
+
+            SwingUtilities.invokeAndWait(() -> gamePanel.showRoundTransition("dog"));
+            assertEquals("ラウンド終了", label(gamePanel, "roleLabel").getText(), "ラウンド終了表示");
+            assertEquals("正解  dog", label(gamePanel, "themeLabel").getText(), "ラウンド正解表示");
+            assertEquals("次のラウンドを準備中", label(gamePanel, "timerLabel").getText(),
+                    "次ラウンド準備表示");
 
             // 実画面ではGamePanelが分割ペイン右側の狭い幅になる。
             // ラウンド情報更新後もTheme/Timeが折り返し先で切れないことを確認する。

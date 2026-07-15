@@ -125,4 +125,5 @@ public class ClientHandler implements Runnable {
     // プレイヤー名を保持・取得するアクセサ（Cさんのスコア管理などで便利）
     public String getUserName() { return userName; }
     public void setUserName(String userName) { this.userName = userName; }
+
 }

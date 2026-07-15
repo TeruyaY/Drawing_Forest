@@ -3,6 +3,7 @@ package client.game;
 import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 import client.GameClient;
 import client.draw.DrawController;
@@ -15,12 +16,19 @@ public class GameController {
     private static GamePanel gamePanel;
     private static Consumer<String> gameEndListener;
     private static Runnable roundStartedListener;
+    private static Timer pendingRoundTransition;
+    private static Timer pendingGameEndTransition;
+    private static long lastCorrectAtMillis;
+    private static final int ROUND_END_HOLD_MILLIS = 1_150;
+    private static final int FINAL_RESULT_DELAY_MILLIS = 1_500;
 
     public static void init(GameClient gameClient, ChatPanel panel) {
         init(gameClient, panel, null);
     }
 
     public static void init(GameClient gameClient, ChatPanel panel, GamePanel panelContainer) {
+        cancelPendingRoundTransition();
+        cancelPendingGameEndTransition();
         client = gameClient;
         chatPanel = panel;
         gamePanel = panelContainer;
@@ -97,6 +105,8 @@ public class GameController {
     }
 
     private static void handleRoundStart(String data) {
+        cancelPendingRoundTransition();
+        cancelPendingGameEndTransition();
         String[] parts = data == null ? new String[0] : data.split(",", -1);
         String round = parts.length > 1 ? parts[1] : "?";
         String total = parts.length > 2 ? parts[2] : "?";
@@ -133,6 +143,7 @@ public class GameController {
         String value = parts.length > 1 ? parts[1] : "";
 
         if ("CORRECT".equals(result)) {
+            lastCorrectAtMillis = System.currentTimeMillis();
             showResult("Correct! +" + value);
         } else if ("WRONG".equals(result)) {
             showResult("Wrong");
@@ -148,6 +159,15 @@ public class GameController {
         String reason = parts.length > 0 ? parts[0] : "";
         String theme = parts.length > 1 ? parts[1] : "";
         addChat("Round ended (" + reason + "). Answer: " + theme);
+        if (gamePanel != null) {
+            cancelPendingRoundTransition();
+            pendingRoundTransition = new Timer(ROUND_END_HOLD_MILLIS, event -> {
+                pendingRoundTransition = null;
+                gamePanel.showRoundTransition(theme);
+            });
+            pendingRoundTransition.setRepeats(false);
+            pendingRoundTransition.start();
+        }
     }
 
     private static void handleTime(String data) {
@@ -161,12 +181,43 @@ public class GameController {
     }
 
     private static void handleGameEnd(String data) {
+        cancelPendingRoundTransition();
         addChat("Game finished. Final scores: " + data);
+        long elapsed = System.currentTimeMillis() - lastCorrectAtMillis;
+        boolean showingCorrectEffect = elapsed >= 0 && elapsed < FINAL_RESULT_DELAY_MILLIS;
         if (gamePanel != null) {
-            gamePanel.setScores(data);
+            gamePanel.setScoresWithoutEffect(data);
+            if (!showingCorrectEffect) {
+                gamePanel.showGameFinishing();
+            }
         }
+
+        cancelPendingGameEndTransition();
+        pendingGameEndTransition = new Timer(FINAL_RESULT_DELAY_MILLIS, event -> {
+            pendingGameEndTransition = null;
+            showFinalResult(data);
+        });
+        pendingGameEndTransition.setRepeats(false);
+        pendingGameEndTransition.start();
+    }
+
+    private static void cancelPendingRoundTransition() {
+        if (pendingRoundTransition != null) {
+            pendingRoundTransition.stop();
+            pendingRoundTransition = null;
+        }
+    }
+
+    private static void cancelPendingGameEndTransition() {
+        if (pendingGameEndTransition != null) {
+            pendingGameEndTransition.stop();
+            pendingGameEndTransition = null;
+        }
+    }
+
+    private static void showFinalResult(String scores) {
         if (gameEndListener != null) {
-            gameEndListener.accept(data);
+            gameEndListener.accept(scores);
         }
     }
 

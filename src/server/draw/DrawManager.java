@@ -54,7 +54,7 @@ public class DrawManager {
 
     // ============================================================
     // ClientHandler から呼ばれる本体
-    //   data の形式: "部屋ID,X1,Y1,X2,Y2,色"   (例: "testroom,150,200,152,205,BLACK")
+    //   data の形式: "部屋ID,X1,Y1,X2,Y2,色,線幅"
     // ============================================================
     public static void handleDrawData(ClientHandler client, String data) {
         // 先頭の「部屋ID」と、それ以降の「座標+色」に分ける
@@ -64,7 +64,7 @@ public class DrawManager {
             return;
         }
         String roomId  = parts[0].trim();
-        String payload = parts[1]; // "X1,Y1,X2,Y2,色"
+        String payload = parts[1];
 
         if (!isAuthorizedDrawer(client, roomId) || !isValidPayload(payload)) {
             return;
@@ -121,7 +121,7 @@ public class DrawManager {
 
     private static boolean isValidPayload(String payload) {
         String[] values = payload == null ? new String[0] : payload.split(",", -1);
-        if (values.length != 5) {
+        if (values.length != 5 && values.length != 6) {
             return false;
         }
         try {
@@ -133,12 +133,24 @@ public class DrawManager {
             return false;
         }
 
+        if (values.length == 6) {
+            try {
+                float width = Float.parseFloat(values[5].trim());
+                if (width < 2.0f || width > 24.0f) {
+                    return false;
+                }
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+
         switch (values[4].trim().toUpperCase()) {
             case "BLACK":
             case "RED":
             case "BLUE":
             case "GREEN":
             case "YELLOW":
+            case "PURPLE":
             case "WHITE":
                 return true;
             default:

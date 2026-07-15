@@ -12,7 +12,7 @@ public class Protocol {
     public static final String ROOM_ERROR = "ROOM_ERROR";         // サーバーから: エラーメッセージ
     
     // B: お絵描き関連コマンド
-    public static final String DRAW_DATA   = "DRAW_DATA";         // 引数: 部屋ID, X1,Y1,X2,Y2,色
+    public static final String DRAW_DATA   = "DRAW_DATA";         // 引数: 部屋ID,X1,Y1,X2,Y2,色,線幅（線幅は省略可）
     public static final String DRAW_RECEIVED = "DRAW_RCV";        // サーバーからの他プレイヤーへの転送
     public static final String DRAW_CLEAR  = "DRAW_CLEAR";        // 引数: 部屋ID（Clearボタンが押された通知）
     public static final String DRAW_CLEAR_RECEIVED = "DRAW_CLR";  // サーバーから: 他プレイヤーがClearを押した通知

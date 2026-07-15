@@ -2,90 +2,155 @@ package client.draw;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 
 import javax.swing.JPanel;
 
+import client.UiTheme;
+
 /**
- * 担当B（お絵描き）のキャンバスUI。
- *
- * ・マウスのドラッグを検知して線を描く（ローカル描画）
- * ・引いた線分(x1,y1,x2,y2,色)を DrawController.sendLine() でサーバーへ送る
- * ・サーバー経由で届いた他人の線を drawRemoteLine() で描く
- *
- * 描いた内容は BufferedImage に焼き付けて保持するので、
- * ウインドウの再描画やリサイズでも消えない。
+ * フリーボード型の共同描画キャンバス。
+ * 描画データは固定サイズの論理キャンバスに保持し、ウインドウに合わせて拡縮表示する。
  */
 public class DrawPanel extends JPanel {
+    private static final int CANVAS_W = 1100;
+    private static final int CANVAS_H = 680;
+    private static final int BOARD_MARGIN = 28;
+    private static final Color CANVAS_COLOR = new Color(253, 253, 250);
 
-    private static final int CANVAS_W = 750;
-    private static final int CANVAS_H = 550;
-    private static final float STROKE = 2.0f;
-
-    private BufferedImage canvas;   // 描画内容を保持する裏画像
-    private Graphics2D g2;          // canvas への描画用
-    private Point prev;             // 直前のマウス位置
+    private final BufferedImage canvas;
+    private final Graphics2D canvasGraphics;
+    private Point previousCanvasPoint;
+    private Point hoverPoint;
     private String currentColor = "BLACK";
-    private boolean drawingEnabled = true; // Drawer役のときだけtrueにする
+    private String lastInkColor = "BLACK";
+    private float strokeWidth = 4.0f;
+    private boolean drawingEnabled = true;
 
     public DrawPanel() {
-        setPreferredSize(new Dimension(CANVAS_W, CANVAS_H));
-        setBackground(Color.WHITE);
-        initCanvas();
+        setPreferredSize(new Dimension(920, 650));
+        setMinimumSize(new Dimension(520, 360));
+        setBackground(UiTheme.APP_BACKGROUND);
+        setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        setFocusable(true);
+        getAccessibleContext().setAccessibleName("お絵描きキャンバス");
+        getAccessibleContext().setAccessibleDescription("マウスをドラッグして絵を描きます");
+
+        canvas = new BufferedImage(CANVAS_W, CANVAS_H, BufferedImage.TYPE_INT_RGB);
+        canvasGraphics = canvas.createGraphics();
+        canvasGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        clearCanvas();
 
         MouseAdapter mouse = new MouseAdapter() {
             @Override
-            public void mousePressed(MouseEvent e) {
+            public void mousePressed(MouseEvent event) {
                 if (!drawingEnabled) {
                     return;
                 }
-                prev = e.getPoint();
+                requestFocusInWindow();
+                previousCanvasPoint = toCanvasPoint(event.getPoint());
             }
 
             @Override
-            public void mouseDragged(MouseEvent e) {
-                if (!drawingEnabled || prev == null) {
+            public void mouseDragged(MouseEvent event) {
+                if (!drawingEnabled) {
+                    previousCanvasPoint = null;
                     return;
                 }
-                Point cur = e.getPoint();
-                // 1) 自分の画面にすぐ描く
-                drawLine(prev.x, prev.y, cur.x, cur.y, currentColor);
-                // 2) サーバーへ送って他の人にも描いてもらう
-                DrawController.sendLine(prev.x, prev.y, cur.x, cur.y, currentColor);
-                prev = cur;
+                Point current = toCanvasPoint(event.getPoint());
+                hoverPoint = event.getPoint();
+                if (previousCanvasPoint != null && current != null) {
+                    drawLine(previousCanvasPoint.x, previousCanvasPoint.y, current.x, current.y,
+                            currentColor, strokeWidth);
+                    DrawController.sendLine(previousCanvasPoint.x, previousCanvasPoint.y,
+                            current.x, current.y, currentColor, strokeWidth);
+                }
+                previousCanvasPoint = current;
+                repaint();
             }
 
             @Override
-            public void mouseReleased(MouseEvent e) {
-                prev = null;
+            public void mouseMoved(MouseEvent event) {
+                hoverPoint = event.getPoint();
+                repaint();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                previousCanvasPoint = null;
+            }
+
+            @Override
+            public void mouseExited(MouseEvent event) {
+                previousCanvasPoint = null;
+                hoverPoint = null;
+                repaint();
             }
         };
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
-
-        // レイアウト上、パネルの実表示サイズはCANVAS_W/CANVAS_Hより大きくなり得る
-        // (JSplitPane等で引き伸ばされるため)。裏画像がそれより小さいままだと、
-        // はみ出した範囲に描いた線が見切れてしまうので、実サイズに合わせて拡張する。
-        addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                ensureCanvasSize(getWidth(), getHeight());
-            }
-        });
     }
 
-    /** Drawer役のときだけtrueにする。false中はマウス操作もClearも無効。 */
+    private void drawLine(int x1, int y1, int x2, int y2, String colorName, float width) {
+        canvasGraphics.setStroke(new BasicStroke(width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        canvasGraphics.setColor(toColor(colorName));
+        canvasGraphics.drawLine(x1, y1, x2, y2);
+        repaint();
+    }
+
+    public void drawRemoteLine(int x1, int y1, int x2, int y2, String colorName, float width) {
+        drawLine(x1, y1, x2, y2, colorName, width);
+    }
+
+    /** 旧形式の描画データとの互換用。 */
+    public void drawRemoteLine(int x1, int y1, int x2, int y2, String colorName) {
+        drawRemoteLine(x1, y1, x2, y2, colorName, 4.0f);
+    }
+
+    public void setColorName(String colorName) {
+        currentColor = colorName == null ? "BLACK" : colorName;
+        if (!"WHITE".equalsIgnoreCase(currentColor)) {
+            lastInkColor = currentColor;
+        }
+        repaint();
+    }
+
+    public void usePen() {
+        currentColor = lastInkColor;
+        repaint();
+    }
+
+    public String getColorName() {
+        return currentColor;
+    }
+
+    public void setStrokeWidth(float width) {
+        strokeWidth = Math.max(2.0f, Math.min(24.0f, width));
+        repaint();
+    }
+
+    public float getStrokeWidth() {
+        return strokeWidth;
+    }
+
     public void setDrawingEnabled(boolean enabled) {
-        this.drawingEnabled = enabled;
+        boolean previous = drawingEnabled;
+        drawingEnabled = enabled;
+        previousCanvasPoint = null;
+        setCursor(Cursor.getPredefinedCursor(enabled ? Cursor.CROSSHAIR_CURSOR : Cursor.DEFAULT_CURSOR));
+        firePropertyChange("drawingEnabled", previous, enabled);
+        getAccessibleContext().setAccessibleDescription(enabled
+                ? "マウスをドラッグして絵を描きます"
+                : "回答者として、描かれている絵を見ます");
         repaint();
     }
 
@@ -93,52 +158,6 @@ public class DrawPanel extends JPanel {
         return drawingEnabled;
     }
 
-    private void initCanvas() {
-        canvas = new BufferedImage(CANVAS_W, CANVAS_H, BufferedImage.TYPE_INT_RGB);
-        g2 = canvas.createGraphics();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setStroke(new BasicStroke(STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        clearCanvasInternal(); // 白で塗りつぶし
-    }
-
-    /** 裏画像が指定サイズより小さければ、既存の内容を保ったまま大きく作り直す。 */
-    private void ensureCanvasSize(int width, int height) {
-        if (width <= canvas.getWidth() && height <= canvas.getHeight()) {
-            return;
-        }
-
-        int newWidth = Math.max(width, canvas.getWidth());
-        int newHeight = Math.max(height, canvas.getHeight());
-        BufferedImage bigger = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
-        Graphics2D biggerG2 = bigger.createGraphics();
-        biggerG2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        biggerG2.setStroke(new BasicStroke(STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        biggerG2.setColor(Color.WHITE);
-        biggerG2.fillRect(0, 0, newWidth, newHeight);
-        biggerG2.drawImage(canvas, 0, 0, null);
-
-        canvas = bigger;
-        g2 = biggerG2;
-    }
-
-    /** 1本の線分を裏画像に描いて再描画する（自分・他人共通の描画処理）。 */
-    private void drawLine(int x1, int y1, int x2, int y2, String colorName) {
-        g2.setColor(toColor(colorName));
-        g2.drawLine(x1, y1, x2, y2);
-        repaint();
-    }
-
-    /** サーバー経由で届いた他人の線を描く（DrawController からEDTで呼ばれる）。 */
-    public void drawRemoteLine(int x1, int y1, int x2, int y2, String colorName) {
-        drawLine(x1, y1, x2, y2, colorName);
-    }
-
-    /** ペンの色を切り替える。"WHITE" を選べば実質的に消しゴムになる。 */
-    public void setColorName(String colorName) {
-        this.currentColor = colorName;
-    }
-
-    /** Clearボタンから呼ばれる、自分発の操作としてのクリア。Drawer役でないときは無効。 */
     public void clearCanvas() {
         if (!drawingEnabled) {
             return;
@@ -146,40 +165,87 @@ public class DrawPanel extends JPanel {
         clearCanvasInternal();
     }
 
-    /** サーバー経由で届いた「他人がClearを押した」通知、または新ラウンド開始時に呼ばれる。権限に関わらず必ず反映する。 */
     public void clearCanvasFromRemote() {
         clearCanvasInternal();
     }
 
     private void clearCanvasInternal() {
-        g2.setColor(Color.WHITE);
-        g2.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+        canvasGraphics.setColor(CANVAS_COLOR);
+        canvasGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
         repaint();
     }
 
-    /** 色名(文字列) -> Color。Protocolの色表現に合わせて増やせる。 */
     private Color toColor(String name) {
-        String n = (name == null) ? "" : name.trim().toUpperCase();
-        switch (n) {
-            case "RED":    return Color.RED;
-            case "BLUE":   return Color.BLUE;
-            case "GREEN":  return new Color(0, 150, 0);
-            case "YELLOW": return new Color(230, 200, 0);
-            case "WHITE":  return Color.WHITE;   // 消しゴム
+        String normalized = name == null ? "" : name.trim().toUpperCase();
+        switch (normalized) {
+            case "RED": return new Color(204, 57, 63);
+            case "BLUE": return new Color(32, 101, 181);
+            case "GREEN": return new Color(36, 132, 84);
+            case "YELLOW": return new Color(226, 174, 35);
+            case "PURPLE": return new Color(121, 76, 167);
+            case "WHITE": return CANVAS_COLOR;
             case "BLACK":
-            default:       return Color.BLACK;
+            default: return new Color(28, 34, 30);
         }
     }
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        ensureCanvasSize(getWidth(), getHeight());
-        g.drawImage(canvas, 0, 0, null);
-        if (!drawingEnabled) {
-            // 描く権限がないことが一目でわかるよう、うっすら網掛けする
-            g.setColor(new Color(0, 0, 0, 40));
-            g.fillRect(0, 0, getWidth(), getHeight());
+    private Rectangle boardBounds() {
+        int availableWidth = Math.max(1, getWidth() - BOARD_MARGIN * 2);
+        int availableHeight = Math.max(1, getHeight() - BOARD_MARGIN * 2);
+        double scale = Math.min((double) availableWidth / CANVAS_W, (double) availableHeight / CANVAS_H);
+        int width = Math.max(1, (int) Math.round(CANVAS_W * scale));
+        int height = Math.max(1, (int) Math.round(CANVAS_H * scale));
+        return new Rectangle((getWidth() - width) / 2, (getHeight() - height) / 2, width, height);
+    }
+
+    private Point toCanvasPoint(Point panelPoint) {
+        Rectangle board = boardBounds();
+        if (!board.contains(panelPoint)) {
+            return null;
         }
+        double scaleX = (double) CANVAS_W / board.width;
+        double scaleY = (double) CANVAS_H / board.height;
+        int x = (int) Math.round((panelPoint.x - board.x) * scaleX);
+        int y = (int) Math.round((panelPoint.y - board.y) * scaleY);
+        return new Point(Math.min(CANVAS_W - 1, x), Math.min(CANVAS_H - 1, y));
+    }
+
+    @Override
+    protected void paintComponent(Graphics graphics) {
+        super.paintComponent(graphics);
+        Graphics2D g2 = (Graphics2D) graphics.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+
+        Rectangle board = boardBounds();
+        g2.setColor(new Color(27, 35, 30, 22));
+        g2.fillRoundRect(board.x + 3, board.y + 7, board.width, board.height, 12, 12);
+        g2.drawImage(canvas, board.x, board.y, board.width, board.height, null);
+        g2.setColor(UiTheme.BORDER);
+        g2.drawRoundRect(board.x, board.y, board.width, board.height, 10, 10);
+
+        if (drawingEnabled && hoverPoint != null && board.contains(hoverPoint)) {
+            double visualScale = (double) board.width / CANVAS_W;
+            int diameter = Math.max(6, (int) Math.round(strokeWidth * visualScale));
+            int radius = diameter / 2;
+            g2.setColor(toColor(currentColor));
+            g2.setStroke(new BasicStroke(1.4f));
+            g2.drawOval(hoverPoint.x - radius, hoverPoint.y - radius, diameter, diameter);
+        }
+        if (!drawingEnabled) {
+            g2.setColor(new Color(27, 35, 30, 26));
+            g2.fillRoundRect(board.x, board.y, board.width, board.height, 10, 10);
+            String message = "回答者は絵を見て答えよう";
+            g2.setFont(UiTheme.LABEL.deriveFont(15f));
+            int textWidth = g2.getFontMetrics().stringWidth(message);
+            int pillWidth = textWidth + 32;
+            int pillX = board.x + (board.width - pillWidth) / 2;
+            int pillY = board.y + 18;
+            g2.setColor(UiTheme.SURFACE);
+            g2.fillRoundRect(pillX, pillY, pillWidth, 38, 18, 18);
+            g2.setColor(UiTheme.TEXT);
+            g2.drawString(message, pillX + 16, pillY + 25);
+        }
+        g2.dispose();
     }
 }

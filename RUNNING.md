@@ -66,7 +66,7 @@ java -cp out client.room.RoomLauncher <サーバーのIPアドレス> <ポート
 
    ```bash
    # macOS / Linux
-   ifconfig | grep "inet " 
+   ifconfig | grep "inet "
    # または
    ip addr show
 

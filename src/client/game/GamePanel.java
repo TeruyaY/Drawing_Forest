@@ -1,39 +1,37 @@
 package client.game;
 
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
-import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
 
 import javax.swing.BorderFactory;
-import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
-import javax.swing.border.TitledBorder;
 
 import client.UiTheme;
+import client.FeedbackEffect;
 
+/** ラウンド状況、回答チャット、スコアを縦方向に整理したゲームUI。 */
 public class GamePanel extends JPanel {
-    private final JLabel roundLabel = new JLabel("Round: -");
-    private final JLabel roleLabel = new JLabel("Role: -");
-    private final JLabel drawerLabel = new JLabel("Drawer: -");
-    private final JLabel themeLabel = new JLabel("Theme: -");
-    private final JLabel timerLabel = new JLabel("Time: -");
-    private final JTextArea scoreArea = new JTextArea(10, 20);
+    private final JLabel roundLabel = new JLabel("ラウンド  --");
+    private final JLabel roleLabel = new JLabel("役割  --");
+    private final JLabel drawerLabel = new JLabel("描く人  --");
+    private final JLabel themeLabel = new JLabel("お題  --");
+    private final JLabel timerLabel = new JLabel("残り  --");
+    private final JTextArea scoreArea = new JTextArea(4, 20);
     private final ChatPanel chatPanel;
+    private final FeedbackEffect feedbackEffect = new FeedbackEffect(this);
 
     public GamePanel(ChatPanel chatPanel) {
         this.chatPanel = chatPanel;
-        roundLabel.setFont(roundLabel.getFont().deriveFont(Font.BOLD));
-        roleLabel.setFont(roleLabel.getFont().deriveFont(Font.BOLD));
-        themeLabel.setFont(themeLabel.getFont().deriveFont(Font.BOLD));
-        timerLabel.setFont(timerLabel.getFont().deriveFont(Font.BOLD, 15f));
-        setLayout(new BorderLayout(8, 8));
-        setBackground(UiTheme.BACKGROUND);
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        setLayout(new BorderLayout(0, 10));
+        setBackground(UiTheme.APP_BACKGROUND);
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         add(buildStatusPanel(), BorderLayout.NORTH);
         add(chatPanel, BorderLayout.CENTER);
-        add(buildScorePanel(), BorderLayout.EAST);
+        add(buildScorePanel(), BorderLayout.SOUTH);
     }
 
     public ChatPanel getChatPanel() {
@@ -41,85 +39,113 @@ public class GamePanel extends JPanel {
     }
 
     public void setRoundInfo(String roundText, String role, String drawer, String theme) {
-        roundLabel.setText("Round: " + roundText);
-        roleLabel.setText("Role: " + role);
-        roleLabel.setForeground("DRAWER".equals(role) ? UiTheme.DRAWER : UiTheme.GUESSER);
-        drawerLabel.setText("Drawer: " + drawer);
-        themeLabel.setText(theme == null || theme.isEmpty() ? "Theme: (guessers can't see this)" : "Theme: " + theme);
-        refreshStatusLayout();
-    }
-
-    public void setTimeRemaining(int seconds) {
-        timerLabel.setText("Time: " + seconds);
-        timerLabel.setForeground(seconds <= 10 ? UiTheme.DANGER : UiTheme.PRIMARY_DARK);
-        refreshStatusLayout();
-    }
-
-    public void setScores(String scoreText) {
-        scoreArea.setText(formatScores(scoreText));
-    }
-
-    private JPanel buildStatusPanel() {
-        // 1行のFlowLayoutは狭い分割ペインで折り返した行が親の高さからはみ出すため、
-        // 情報を明示的に2行へ分け、Theme/Timeを常に表示領域内へ収める。
-        JPanel firstRow = statusRow(16);
-        firstRow.add(roundLabel);
-        firstRow.add(roleLabel);
-        firstRow.add(drawerLabel);
-
-        JPanel secondRow = statusRow(16);
-        secondRow.add(themeLabel);
-        secondRow.add(timerLabel);
-
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBackground(UiTheme.BACKGROUND);
-        panel.add(firstRow);
-        panel.add(secondRow);
-        return panel;
-    }
-
-    private JPanel statusRow(int horizontalGap) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, horizontalGap, 2));
-        row.setAlignmentX(LEFT_ALIGNMENT);
-        row.setBackground(UiTheme.BACKGROUND);
-        return row;
-    }
-
-    private void refreshStatusLayout() {
+        feedbackEffect.stop();
+        roundLabel.setText(roundText.replace("Round", "ラウンド"));
+        boolean isDrawer = "DRAWER".equals(role);
+        roleLabel.setText(isDrawer ? "描く人" : "回答者");
+        roleLabel.setForeground(isDrawer ? UiTheme.DRAWER : UiTheme.GUESSER);
+        drawerLabel.setText("描く人  " + drawer);
+        themeLabel.setText(isDrawer && theme != null && !theme.isEmpty() ? "お題  " + theme : "お題  秘密");
         revalidate();
         repaint();
     }
 
+    public void showRoundTransition(String theme) {
+        String answer = theme == null || theme.isEmpty() ? "不明" : theme;
+        roleLabel.setText("ラウンド終了");
+        roleLabel.setForeground(UiTheme.TEXT);
+        themeLabel.setText("正解  " + answer);
+        timerLabel.setText("次のラウンドを準備中");
+        timerLabel.setForeground(UiTheme.TEXT_MUTED);
+        chatPanel.setRoundTransition(answer);
+        feedbackEffect.play(FeedbackEffect.Type.ROUND_TRANSITION,
+                "ラウンド終了", "正解は「" + answer + "」  次のラウンドを準備中");
+        repaint();
+    }
+
+    public void setTimeRemaining(int seconds) {
+        timerLabel.setText("残り  " + seconds + "秒");
+        timerLabel.setForeground(seconds <= 10 ? UiTheme.DANGER : UiTheme.TEXT);
+        repaint();
+    }
+
+    public void setScores(String scoreText) {
+        setScores(scoreText, true);
+    }
+
+    public void setScoresWithoutEffect(String scoreText) {
+        setScores(scoreText, false);
+    }
+
+    private void setScores(String scoreText, boolean animate) {
+        scoreArea.setText(formatScores(scoreText));
+        if (animate) {
+            feedbackEffect.play(FeedbackEffect.Type.SCORE);
+        }
+    }
+
+    public void showGameFinishing() {
+        roleLabel.setText("ゲーム終了");
+        roleLabel.setForeground(UiTheme.TEXT);
+        themeLabel.setText("最終スコアを確定しました");
+        timerLabel.setText("結果を集計中");
+        timerLabel.setForeground(UiTheme.TEXT_MUTED);
+        chatPanel.setGameFinishing();
+        feedbackEffect.play(FeedbackEffect.Type.ROUND_TRANSITION,
+                "ゲーム終了", "最終結果を集計しています");
+        repaint();
+    }
+
+    private JPanel buildStatusPanel() {
+        JPanel panel = new JPanel(new GridLayout(3, 2, 8, 5));
+        panel.setBackground(UiTheme.SURFACE);
+        panel.setBorder(UiTheme.panelBorder(12, 12));
+        for (JLabel label : new JLabel[] {roundLabel, timerLabel, roleLabel, drawerLabel, themeLabel}) {
+            label.setFont(UiTheme.LABEL);
+        }
+        panel.add(roundLabel);
+        panel.add(timerLabel);
+        panel.add(roleLabel);
+        panel.add(drawerLabel);
+        panel.add(themeLabel);
+        panel.add(new JLabel(""));
+        return panel;
+    }
+
     private JPanel buildScorePanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(UiTheme.PRIMARY_LIGHT);
-        TitledBorder border = BorderFactory.createTitledBorder("Scores");
-        border.setTitleFont(border.getTitleFont().deriveFont(Font.BOLD));
-        border.setTitleColor(UiTheme.PRIMARY_DARK);
-        panel.setBorder(border);
+        JPanel panel = new JPanel(new BorderLayout(0, 7));
+        panel.setBackground(UiTheme.SURFACE);
+        panel.setBorder(UiTheme.panelBorder(10, 12));
+        JLabel title = new JLabel("現在のスコア");
+        title.setFont(UiTheme.LABEL);
+        panel.add(title, BorderLayout.NORTH);
         scoreArea.setEditable(false);
-        scoreArea.setBackground(UiTheme.PRIMARY_LIGHT);
-        scoreArea.setFont(scoreArea.getFont().deriveFont(15f));
+        scoreArea.setFocusable(false);
+        scoreArea.setLineWrap(true);
+        scoreArea.setWrapStyleWord(true);
+        scoreArea.setBackground(UiTheme.SURFACE);
+        scoreArea.setForeground(UiTheme.TEXT);
+        scoreArea.getAccessibleContext().setAccessibleName("現在のスコア");
         panel.add(scoreArea, BorderLayout.CENTER);
         return panel;
     }
 
     private String formatScores(String scoreText) {
         if (scoreText == null || scoreText.trim().isEmpty()) {
-            return "";
+            return "まだスコアはありません";
         }
-        StringBuilder sb = new StringBuilder();
-        String[] entries = scoreText.split(";");
-        for (String entry : entries) {
-            if (entry.trim().isEmpty()) {
-                continue;
-            }
-            if (sb.length() > 0) {
-                sb.append(System.lineSeparator());
-            }
-            sb.append(entry.replace("=", ": "));
+        StringBuilder formatted = new StringBuilder();
+        for (String entry : scoreText.split(";")) {
+            if (entry.trim().isEmpty()) continue;
+            if (formatted.length() > 0) formatted.append("   ");
+            formatted.append(entry.replace("=", "  ")).append("点");
         }
-        return sb.toString();
+        return formatted.toString();
+    }
+
+    @Override
+    protected void paintChildren(Graphics graphics) {
+        super.paintChildren(graphics);
+        feedbackEffect.paint((Graphics2D) graphics, getWidth(), getHeight());
     }
 }

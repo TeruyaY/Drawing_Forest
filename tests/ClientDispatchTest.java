@@ -92,6 +92,12 @@ public final class ClientDispatchTest {
             assertTrue(area(gamePanel, "scoreArea").getText().contains("アリス  500点"), "スコア表示");
             assertEquals("正解！ +500", label(chatPanel, "resultLabel").getText(), "正解表示");
 
+            SwingUtilities.invokeAndWait(() -> gamePanel.showRoundTransition("dog"));
+            assertEquals("ラウンド終了", label(gamePanel, "roleLabel").getText(), "ラウンド終了表示");
+            assertEquals("正解  dog", label(gamePanel, "themeLabel").getText(), "ラウンド正解表示");
+            assertEquals("次のラウンドを準備中", label(gamePanel, "timerLabel").getText(),
+                    "次ラウンド準備表示");
+
             // 実画面ではGamePanelが分割ペイン右側の狭い幅になる。
             // ラウンド情報更新後もTheme/Timeが折り返し先で切れないことを確認する。
             gamePanel.setSize(560, 700);

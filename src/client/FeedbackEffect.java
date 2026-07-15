@@ -2,6 +2,8 @@ package client;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.Random;
@@ -14,17 +16,21 @@ import javax.swing.Timer;
  * -Ddrawingforest.reduceMotion=true で全アニメーションを無効化できる。
  */
 public final class FeedbackEffect {
-    public enum Type { SUCCESS, ERROR, INFO, SCORE, CELEBRATION }
+    public enum Type { SUCCESS, ERROR, INFO, SCORE, ROUND_TRANSITION, CELEBRATION }
 
     private static final int FRAME_MILLIS = 16;
     private static final int FEEDBACK_DURATION = 420;
-    private static final int CELEBRATION_DURATION = 500;
+    private static final int SUCCESS_DURATION = 1_400;
+    private static final int ROUND_TRANSITION_DURATION = 2_800;
+    private static final int CELEBRATION_DURATION = 900;
     private static final int PARTICLE_COUNT = 30;
 
     private final JComponent host;
     private final Timer timer;
     private final Particle[] particles = new Particle[PARTICLE_COUNT];
     private Type type;
+    private String title = "";
+    private String subtitle = "";
     private long startedAt;
     private int durationMillis;
 
@@ -45,6 +51,10 @@ public final class FeedbackEffect {
     }
 
     public void play(Type requestedType) {
+        play(requestedType, "", "");
+    }
+
+    public void play(Type requestedType, String requestedTitle, String requestedSubtitle) {
         if (prefersReducedMotion()) {
             type = null;
             timer.stop();
@@ -52,11 +62,19 @@ public final class FeedbackEffect {
             return;
         }
         type = requestedType;
-        durationMillis = requestedType == Type.CELEBRATION ? CELEBRATION_DURATION : FEEDBACK_DURATION;
+        title = requestedTitle == null ? "" : requestedTitle;
+        subtitle = requestedSubtitle == null ? "" : requestedSubtitle;
+        durationMillis = durationFor(requestedType);
         startedAt = System.nanoTime();
         if (!timer.isRunning()) {
             timer.start();
         }
+        host.repaint();
+    }
+
+    public void stop() {
+        timer.stop();
+        type = null;
         host.repaint();
     }
 
@@ -73,7 +91,7 @@ public final class FeedbackEffect {
             return;
         }
         double eased = 1.0 - Math.pow(1.0 - progress, 4.0);
-        double fade = 1.0 - progress;
+        double fade = trailingFade(progress, type == Type.SUCCESS ? 0.72 : 0.58);
 
         Graphics2D g2 = (Graphics2D) graphics.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -81,6 +99,7 @@ public final class FeedbackEffect {
             case SUCCESS:
                 paintFlash(g2, width, height, UiTheme.SUCCESS, fade, 52);
                 paintConfetti(g2, width, height, eased, fade, false);
+                paintMessage(g2, width, height, title, subtitle, UiTheme.SUCCESS, fade, false);
                 break;
             case CELEBRATION:
                 paintConfetti(g2, width, height, eased, fade, true);
@@ -93,6 +112,9 @@ public final class FeedbackEffect {
                 break;
             case SCORE:
                 paintScoreSweep(g2, width, height, eased, fade);
+                break;
+            case ROUND_TRANSITION:
+                paintRoundTransition(g2, width, height, progress, fade);
                 break;
             default:
                 break;
@@ -121,6 +143,18 @@ public final class FeedbackEffect {
         return Math.min(1.0, Math.max(0.0, elapsedMillis / durationMillis));
     }
 
+    private int durationFor(Type requestedType) {
+        if (requestedType == Type.SUCCESS) return SUCCESS_DURATION;
+        if (requestedType == Type.ROUND_TRANSITION) return ROUND_TRANSITION_DURATION;
+        if (requestedType == Type.CELEBRATION) return CELEBRATION_DURATION;
+        return FEEDBACK_DURATION;
+    }
+
+    private double trailingFade(double progress, double holdUntil) {
+        if (progress <= holdUntil) return 1.0;
+        return Math.max(0.0, (1.0 - progress) / (1.0 - holdUntil));
+    }
+
     private void paintFlash(Graphics2D g2, int width, int height, Color color, double fade, int maxAlpha) {
         g2.setColor(withAlpha(color, (int) Math.round(maxAlpha * fade)));
         g2.fillRoundRect(1, 1, width - 2, height - 2, 14, 14);
@@ -138,6 +172,49 @@ public final class FeedbackEffect {
         g2.setColor(withAlpha(UiTheme.ACCENT, (int) Math.round(60 * fade)));
         g2.fillRect(x, Math.max(0, height - 110), sweepWidth, Math.min(110, height));
         paintOutline(g2, width, height, UiTheme.ACCENT, fade * 0.7);
+    }
+
+    private void paintRoundTransition(Graphics2D g2, int width, int height, double progress, double fade) {
+        g2.setColor(new Color(20, 32, 25, (int) Math.round(112 * fade)));
+        g2.fillRect(0, 0, width, height);
+        paintMessage(g2, width, height, title, subtitle, UiTheme.ACCENT, fade, true);
+
+        int barWidth = Math.min(280, Math.max(120, width - 120));
+        int barX = (width - barWidth) / 2;
+        int barY = height / 2 + 68;
+        g2.setColor(withAlpha(UiTheme.BORDER, (int) Math.round(210 * fade)));
+        g2.fillRoundRect(barX, barY, barWidth, 5, 5, 5);
+        g2.setColor(withAlpha(UiTheme.ACCENT, (int) Math.round(235 * fade)));
+        g2.fillRoundRect(barX, barY, (int) Math.round(barWidth * (1.0 - progress)), 5, 5, 5);
+    }
+
+    private void paintMessage(Graphics2D g2, int width, int height, String heading, String detail,
+            Color accent, double fade, boolean elevated) {
+        if ((heading == null || heading.isEmpty()) && (detail == null || detail.isEmpty())) return;
+
+        int cardWidth = Math.min(410, Math.max(250, width - 48));
+        int cardHeight = detail == null || detail.isEmpty() ? 78 : 104;
+        int x = (width - cardWidth) / 2;
+        int y = Math.max(18, height / 2 - cardHeight / 2 - (elevated ? 18 : 0));
+        g2.setColor(new Color(252, 253, 250, (int) Math.round(244 * fade)));
+        g2.fillRoundRect(x, y, cardWidth, cardHeight, 20, 20);
+        g2.setStroke(new BasicStroke(2f));
+        g2.setColor(withAlpha(accent, (int) Math.round(220 * fade)));
+        g2.drawRoundRect(x, y, cardWidth, cardHeight, 20, 20);
+
+        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 24));
+        g2.setColor(withAlpha(accent, (int) Math.round(255 * fade)));
+        drawCentered(g2, heading, width / 2, y + 39);
+        if (detail != null && !detail.isEmpty()) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+            g2.setColor(withAlpha(UiTheme.TEXT, (int) Math.round(230 * fade)));
+            drawCentered(g2, detail, width / 2, y + 70);
+        }
+    }
+
+    private void drawCentered(Graphics2D g2, String text, int centerX, int baselineY) {
+        FontMetrics metrics = g2.getFontMetrics();
+        g2.drawString(text, centerX - metrics.stringWidth(text) / 2, baselineY);
     }
 
     private void paintConfetti(Graphics2D g2, int width, int height,

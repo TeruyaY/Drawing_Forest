@@ -61,6 +61,7 @@ public class ChatPanel extends JPanel {
     }
 
     public void setRoundInfo(String role, String drawerName, String theme) {
+        feedbackEffect.stop();
         boolean drawer = "DRAWER".equals(role);
         roleLabel.setText(drawer ? "あなたが描く番です" : drawerName + " さんの絵を当てよう");
         roleLabel.setForeground(drawer ? UiTheme.DRAWER : UiTheme.GUESSER);
@@ -94,10 +95,20 @@ public class ChatPanel extends JPanel {
         resultLabel.setText(localized.isEmpty() ? " " : localized);
         resultLabel.setForeground(resultColor(message));
         if (message != null && message.startsWith("Correct")) {
-            feedbackEffect.play(FeedbackEffect.Type.SUCCESS);
+            feedbackEffect.play(FeedbackEffect.Type.SUCCESS, localized, "得点を獲得しました");
         } else if (message != null && (message.startsWith("Wrong") || message.startsWith("Error"))) {
             feedbackEffect.play(FeedbackEffect.Type.ERROR);
         }
+    }
+
+    public void setRoundTransition(String theme) {
+        roleLabel.setText("ラウンド終了");
+        roleLabel.setForeground(UiTheme.TEXT);
+        themeLabel.setText("正解: " + (theme == null || theme.isEmpty() ? "不明" : theme));
+        inputField.setEnabled(false);
+        sendButton.setEnabled(false);
+        inputField.setToolTipText("次のラウンドを準備しています");
+        repaint();
     }
 
     private JPanel buildHeader() {

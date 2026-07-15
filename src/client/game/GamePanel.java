@@ -39,6 +39,7 @@ public class GamePanel extends JPanel {
     }
 
     public void setRoundInfo(String roundText, String role, String drawer, String theme) {
+        feedbackEffect.stop();
         roundLabel.setText(roundText.replace("Round", "ラウンド"));
         boolean isDrawer = "DRAWER".equals(role);
         roleLabel.setText(isDrawer ? "描く人" : "回答者");
@@ -46,6 +47,19 @@ public class GamePanel extends JPanel {
         drawerLabel.setText("描く人  " + drawer);
         themeLabel.setText(isDrawer && theme != null && !theme.isEmpty() ? "お題  " + theme : "お題  秘密");
         revalidate();
+        repaint();
+    }
+
+    public void showRoundTransition(String theme) {
+        String answer = theme == null || theme.isEmpty() ? "不明" : theme;
+        roleLabel.setText("ラウンド終了");
+        roleLabel.setForeground(UiTheme.TEXT);
+        themeLabel.setText("正解  " + answer);
+        timerLabel.setText("次のラウンドを準備中");
+        timerLabel.setForeground(UiTheme.TEXT_MUTED);
+        chatPanel.setRoundTransition(answer);
+        feedbackEffect.play(FeedbackEffect.Type.ROUND_TRANSITION,
+                "ラウンド終了", "正解は「" + answer + "」  次のラウンドを準備中");
         repaint();
     }
 

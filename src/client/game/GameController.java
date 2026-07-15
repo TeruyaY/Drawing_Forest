@@ -97,10 +97,6 @@ public class GameController {
     }
 
     private static void handleRoundStart(String data) {
-        if (roundStartedListener != null) {
-            roundStartedListener.run();
-        }
-
         String[] parts = data == null ? new String[0] : data.split(",", -1);
         String round = parts.length > 1 ? parts[1] : "?";
         String total = parts.length > 2 ? parts[2] : "?";
@@ -120,6 +116,14 @@ public class GameController {
         }
         if (gamePanel != null) {
             gamePanel.setRoundInfo("Round " + round + "/" + total, role, drawer, theme);
+            gamePanel.setTimeRemaining(seconds);
+        }
+
+        // 表示内容をすべて反映してからゲーム画面へ切り替える。
+        // 先にCardLayoutを切り替えると、初期値の短いラベル幅でレイアウトされ、
+        // Theme/Timeが次のリサイズまで見切れることがある。
+        if (roundStartedListener != null) {
+            roundStartedListener.run();
         }
     }
 

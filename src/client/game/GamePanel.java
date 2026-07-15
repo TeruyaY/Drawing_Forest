@@ -5,6 +5,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
@@ -45,11 +46,13 @@ public class GamePanel extends JPanel {
         roleLabel.setForeground("DRAWER".equals(role) ? UiTheme.DRAWER : UiTheme.GUESSER);
         drawerLabel.setText("Drawer: " + drawer);
         themeLabel.setText(theme == null || theme.isEmpty() ? "Theme: (guessers can't see this)" : "Theme: " + theme);
+        refreshStatusLayout();
     }
 
     public void setTimeRemaining(int seconds) {
         timerLabel.setText("Time: " + seconds);
         timerLabel.setForeground(seconds <= 10 ? UiTheme.DANGER : UiTheme.PRIMARY_DARK);
+        refreshStatusLayout();
     }
 
     public void setScores(String scoreText) {
@@ -57,16 +60,35 @@ public class GamePanel extends JPanel {
     }
 
     private JPanel buildStatusPanel() {
-        // GridLayoutだと全ラベルが均等幅に押し込まれて省略表示(...)になってしまうため、
-        // 各ラベルが内容に応じた幅で並ぶFlowLayoutにしている。
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
+        // 1行のFlowLayoutは狭い分割ペインで折り返した行が親の高さからはみ出すため、
+        // 情報を明示的に2行へ分け、Theme/Timeを常に表示領域内へ収める。
+        JPanel firstRow = statusRow(16);
+        firstRow.add(roundLabel);
+        firstRow.add(roleLabel);
+        firstRow.add(drawerLabel);
+
+        JPanel secondRow = statusRow(16);
+        secondRow.add(themeLabel);
+        secondRow.add(timerLabel);
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(UiTheme.BACKGROUND);
-        panel.add(roundLabel);
-        panel.add(roleLabel);
-        panel.add(drawerLabel);
-        panel.add(themeLabel);
-        panel.add(timerLabel);
+        panel.add(firstRow);
+        panel.add(secondRow);
         return panel;
+    }
+
+    private JPanel statusRow(int horizontalGap) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, horizontalGap, 2));
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        row.setBackground(UiTheme.BACKGROUND);
+        return row;
+    }
+
+    private void refreshStatusLayout() {
+        revalidate();
+        repaint();
     }
 
     private JPanel buildScorePanel() {

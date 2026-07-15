@@ -1,5 +1,7 @@
 package tests;
 
+import java.awt.Component;
+import java.awt.Container;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -50,10 +52,32 @@ public final class ClientDispatchTest {
             server.send("ROOM_MEMBERS:日本語部屋,アリス|ボブ");
             server.send("GAME_READY:1,2,アリス");
             server.send("G_R_START:日本語部屋,1,2,アリス,DRAWER,dog,60");
+
+            waitFor(() -> "Time: 60".equals(label(gamePanel, "timerLabel").getText()), 2_000);
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals("Theme: dog", label(gamePanel, "themeLabel").getText(), "開始直後のゲームTheme");
+            assertEquals("Time: 60", label(gamePanel, "timerLabel").getText(), "開始直後のゲームTime");
+            assertEquals("Theme: dog", label(chatPanel, "themeLabel").getText(), "開始直後のチャットTheme");
+            assertEquals("Time: 60", label(chatPanel, "timerLabel").getText(), "開始直後のチャットTime");
+            assertTrue(drawPanel.isDrawingEnabled(), "Drawerの描画権限");
+
+            // 次ラウンドでGuesserへ切り替わった直後の表示も確認する。
+            server.send("G_R_START:日本語部屋,2,2,ボブ,GUESSER,,60");
+            waitFor(() -> "Role: GUESSER".equals(label(gamePanel, "roleLabel").getText()), 2_000);
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals("Theme: (guessers can't see this)", label(gamePanel, "themeLabel").getText(),
+                    "役割切替後のゲームTheme");
+            assertEquals("Time: 60", label(gamePanel, "timerLabel").getText(), "役割切替後のゲームTime");
+            assertEquals("Theme: (guessers can't see this)", label(chatPanel, "themeLabel").getText(),
+                    "役割切替後のチャットTheme");
+            assertEquals("Time: 60", label(chatPanel, "timerLabel").getText(), "役割切替後のチャットTime");
+            assertTrue(!drawPanel.isDrawingEnabled(), "Guesserの描画禁止");
+
             server.send("G_SCORE:アリス=500;ボブ=0");
             server.send("G_TIME:42");
             server.send("G_JUDGE:CORRECT,500");
             server.send("G_R_END:all_correct,dog");
+            server.send("GAME_READY:0,2,");
             server.send("GAME_END:アリス=500;ボブ=0");
 
             waitFor(() -> "日本語部屋".equals(RoomController.getCurrentRoom()), 2_000);
@@ -61,12 +85,21 @@ public final class ClientDispatchTest {
             SwingUtilities.invokeAndWait(() -> { });
 
             assertEquals("日本語部屋", DrawController.getRoomId(), "描画ルームID");
-            assertTrue(drawPanel.isDrawingEnabled(), "Drawerの描画権限");
             assertEquals(2, model(roomPanel, "memberListModel").getSize(), "メンバー数");
-            assertEquals("準備完了: 1 / 2", label(roomPanel, "readyStatusLabel").getText(), "準備表示");
+            assertEquals("準備完了: 0 / 2", label(roomPanel, "readyStatusLabel").getText(),
+                    "ゲーム終了後の準備表示");
             assertEquals("Time: 42", label(gamePanel, "timerLabel").getText(), "タイマー表示");
             assertTrue(area(gamePanel, "scoreArea").getText().contains("アリス: 500"), "スコア表示");
             assertEquals("Correct! +500", label(chatPanel, "resultLabel").getText(), "正解表示");
+
+            // 実画面ではGamePanelが分割ペイン右側の狭い幅になる。
+            // ラウンド情報更新後もTheme/Timeが折り返し先で切れないことを確認する。
+            gamePanel.setSize(560, 700);
+            layoutRecursively(gamePanel);
+            assertFullyVisible(label(gamePanel, "themeLabel"), "ゲーム情報のTheme");
+            assertFullyVisible(label(gamePanel, "timerLabel"), "ゲーム情報のTime");
+            assertFullyVisible(label(chatPanel, "themeLabel"), "チャット情報のTheme");
+            assertFullyVisible(label(chatPanel, "timerLabel"), "チャット情報のTime");
         } finally {
             client.close();
         }
@@ -118,6 +151,29 @@ public final class ClientDispatchTest {
     private static void assertTrue(boolean value, String label) {
         if (!value) {
             throw new AssertionError(label + "を確認できません");
+        }
+    }
+
+    private static void layoutRecursively(Container container) {
+        container.doLayout();
+        for (Component component : container.getComponents()) {
+            if (component instanceof Container) {
+                layoutRecursively((Container) component);
+            }
+        }
+    }
+
+    private static void assertFullyVisible(Component component, String label) {
+        Container parent = component.getParent();
+        boolean visible = component.getWidth() > 0
+                && component.getHeight() > 0
+                && component.getX() >= 0
+                && component.getY() >= 0
+                && component.getX() + component.getWidth() <= parent.getWidth()
+                && component.getY() + component.getHeight() <= parent.getHeight();
+        if (!visible) {
+            throw new AssertionError(label + "が表示領域外です: component="
+                    + component.getBounds() + ", parent=" + parent.getBounds());
         }
     }
 
